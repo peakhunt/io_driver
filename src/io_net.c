@@ -15,23 +15,6 @@ static const char* TAG  = "io_net";
 
 ///////////////////////////////////////////////////////////////////////////////
 //
-// io_net_t allocator
-//
-///////////////////////////////////////////////////////////////////////////////
-static inline io_net_t*
-io_net_alloc(void)
-{
-  return calloc(1, sizeof(io_net_t));
-}
-
-static inline void
-io_net_free(io_net_t* n)
-{
-  free(n);
-}
-
-///////////////////////////////////////////////////////////////////////////////
-//
 // socket related utilities
 //
 ///////////////////////////////////////////////////////////////////////////////
@@ -51,9 +34,26 @@ sock_util_put_nonblock(int sd)
 static void
 io_net_generic_callback(io_driver_watcher_t* w, io_driver_event e)
 {
+  io_net_t*       n = container_of(w, io_net_t, watcher);
+  uint8_t         buf[128];
+  int             ret;
+  io_net_event_t  ev;
+
   switch(e)
   {
   case IO_DRIVER_EVENT_RX:
+    ret = read(n->sd, buf, 128);
+    if(ret <= 0)
+    {
+      ev.ev = IO_NET_EVENT_CLOSED;
+    }
+    else
+    {
+      ev.ev = IO_NET_EVENT_RX;
+      ev.r.buf = buf;
+      ev.r.len = (uint32_t)ret;
+    }
+    n->cb(n, &ev);
     break;
 
   case IO_DRIVER_EVENT_TX:
@@ -64,7 +64,7 @@ io_net_generic_callback(io_driver_watcher_t* w, io_driver_event e)
 }
 
 static void
-io_net_bind_callback(io_driver_watcher_t* w, io_driver_event e)
+io_net_accept_callback(io_driver_watcher_t* w, io_driver_event e)
 {
   int                     newsd;
   io_net_t*               l = container_of(w, io_net_t, watcher);
@@ -88,7 +88,7 @@ io_net_bind_callback(io_driver_watcher_t* w, io_driver_event e)
     return;
   }
 
-  n = io_net_alloc();
+  n = l->alloc(l);
   if(n == NULL)
   {
     LOGE(TAG, "%s io_net_alloc failed\n", __func__);
@@ -148,20 +148,12 @@ io_net_connect_callback(io_driver_watcher_t* w, io_driver_event e)
 // public interfaces
 //
 ///////////////////////////////////////////////////////////////////////////////
-io_net_t*
-io_net_bind(io_driver_t* driver, int port, io_net_callback cb)
+int
+io_net_bind(io_driver_t* driver, io_net_t* n, int port, io_net_callback cb, io_net_alloc alloc)
 {
-  io_net_t*             n;
   int                   sd;
   const int             on = 1;
   struct sockaddr_in    addr;
-
-  n = io_net_alloc();
-  if(n == NULL)
-  {
-    LOGE(TAG, "%s failed to io_net_alloc\n", __func__);
-    goto failed;
-  }
 
   sd = socket(AF_INET, SOCK_STREAM, 0);
   if(sd < 0)
@@ -187,37 +179,27 @@ io_net_bind(io_driver_t* driver, int port, io_net_callback cb)
 
   n->sd     = sd;
   n->cb     = cb;
+  n->alloc  = alloc;
   n->driver = driver;
 
-  io_driver_watcher_init(&n->watcher, sd, io_net_bind_callback);
+  io_driver_watcher_init(&n->watcher, sd, io_net_accept_callback);
 
   io_driver_watch(driver, &n->watcher, IO_DRIVER_EVENT_RX);
 
-  return n;
+  return 0;
 
 bind_failed:
   close(sd);
 
 socket_failed:
-  io_net_free(n);
-
-failed:
-  return NULL;
+  return -1;
 }
 
-io_net_t*
-io_net_connect(io_driver_t* driver, const char* ip_addr, int port, io_net_callback cb)
+int
+io_net_connect(io_driver_t* driver, io_net_t* n, const char* ip_addr, int port, io_net_callback cb)
 {
-  io_net_t*           n;
   int                 sd;
   struct sockaddr_in  to;
-
-  n = io_net_alloc();
-  if(n == NULL)
-  {
-    LOGE(TAG, "%s failed to io_net_alloc\n", __func__);
-    goto failed;
-  }
 
   sd = socket(AF_INET, SOCK_STREAM, 0);
   if(sd < 0)
@@ -246,25 +228,41 @@ io_net_connect(io_driver_t* driver, const char* ip_addr, int port, io_net_callba
   //
   connect(sd, (struct sockaddr*)&to, sizeof(to));
 
-  return n;
+  return 0;
 
 socket_failed:
-  io_net_free(n);
-
-failed:
-  return NULL;
+  return -1;
 }
 
 void
 io_net_close(io_net_t* n)
 {
-  io_driver_no_watch(n->driver, &n->watcher, IO_DRIVER_EVENT_RX | IO_DRIVER_EVENT_TX | IO_DRIVER_EVENT_EX);
+  io_driver_no_watch(n->driver,
+      &n->watcher,
+      IO_DRIVER_EVENT_RX | IO_DRIVER_EVENT_TX | IO_DRIVER_EVENT_EX);
   close(n->sd);
-  io_net_free(n);
 }
 
 int
 io_net_tx(io_net_t* n, uint8_t* buf, int len)
 {
-  return -1;
+  //
+  // FIXME
+  // this should be changed to  event/buffer based TX
+  //
+  int nwritten = 0,
+      ret;
+
+  while(nwritten < len)
+  {
+    ret = write(n->sd, &buf[nwritten], len - nwritten);
+    if(ret <= 0)
+    {
+      if(!(errno == EWOULDBLOCK || errno == EAGAIN))
+      {
+        return -1;
+      }
+    }
+  }
+  return nwritten;
 }

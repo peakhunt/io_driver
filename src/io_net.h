@@ -25,19 +25,20 @@ typedef struct
 } io_net_event_t;
 
 typedef void (*io_net_callback)(io_net_t* n, io_net_event_t* e);
+typedef io_net_t* (*io_net_alloc)(io_net_t* n);
 
 struct __io_net_t
 {
   int                   sd;
   io_net_callback       cb;
-  void*                 cb_arg;
+  io_net_alloc          alloc;
 
   io_driver_watcher_t   watcher;
   io_driver_t*          driver;
 };
 
-extern io_net_t* io_net_bind(io_driver_t* driver, int port, io_net_callback cb);
-extern io_net_t* io_net_connect(io_driver_t* driver, const char* ip_addr, int port, io_net_callback cb);
+extern int io_net_bind(io_driver_t* driver, io_net_t* n, int port, io_net_callback cb, io_net_alloc alloc);
+extern int io_net_connect(io_driver_t* driver, io_net_t* n, const char* ip_addr, int port, io_net_callback cb);
 extern void io_net_close(io_net_t* n);
 extern int io_net_tx(io_net_t* n, uint8_t* buf, int len);
 
