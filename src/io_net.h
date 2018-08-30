@@ -52,7 +52,8 @@ extern int io_net_connect(io_driver_t* driver, io_net_t* n, const char* ip_addr,
 extern void io_net_close(io_net_t* n);
 extern int io_net_tx(io_net_t* n, uint8_t* buf, int len);
 
-extern int io_net_udp(io_driver_t* driver, io_net_t* n, int port, uint8_t* rx_buf, int rx_size, io_net_callback cb);
+extern int io_net_udp(io_driver_t* driver, io_net_t* n, int port, io_net_callback cb, 
+    uint8_t* rx_buf, int rx_size);
 extern int io_net_tx_udp(io_net_t* n, struct sockaddr_in* to, uint8_t* buf, int len);
 
 #endif /* !__IO_NET_DEF_H__ */

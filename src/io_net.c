@@ -307,7 +307,8 @@ io_net_tx(io_net_t* n, uint8_t* buf, int len)
 }
 
 int
-io_net_udp(io_driver_t* driver, io_net_t* n, int port, uint8_t* rx_buf, int rx_size, io_net_callback cb)
+io_net_udp(io_driver_t* driver, io_net_t* n, int port, io_net_callback cb,
+    uint8_t* rx_buf, int rx_size)
 {
   int                 sd;
   struct sockaddr_in  mine;
