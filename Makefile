@@ -5,7 +5,9 @@ include Rules.mk
 ########################################
 LIB_IO_DRIVER_SOURCES =                             \
 src/io_driver.c \
-src/io_net.c
+src/io_net.c \
+src/io_timer.c \
+src/soft_timer.c
 
 #######################################
 C_DEFS  = 
