@@ -7,7 +7,8 @@ LIB_IO_DRIVER_SOURCES =                             \
 src/io_driver.c \
 src/io_net.c \
 src/io_timer.c \
-src/soft_timer.c
+src/soft_timer.c \
+src/circ_buffer.c
 
 #######################################
 C_DEFS  = 

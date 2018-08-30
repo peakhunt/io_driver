@@ -27,6 +27,75 @@ sock_util_put_nonblock(int sd)
 
 ///////////////////////////////////////////////////////////////////////////////
 //
+// utilities
+//
+///////////////////////////////////////////////////////////////////////////////
+static void
+io_net_handle_data_rx_event(io_net_t* n)
+{
+  int             ret;
+  io_net_event_t  ev;
+
+  ret = read(n->sd, n->rx_buf, n->rx_size);
+  if(ret <= 0)
+  {
+    ev.ev = IO_NET_EVENT_CLOSED;
+  }
+  else
+  {
+    ev.ev = IO_NET_EVENT_RX;
+    ev.r.buf = n->rx_buf;
+    ev.r.len = (uint32_t)ret;
+  }
+  n->cb(n, &ev);
+}
+
+static void
+io_net_handle_data_tx_event(io_net_t* n)
+{
+  uint8_t   buffer[128];
+  int       data_size,
+            ret,
+            len;
+
+  if(circ_buffer_is_empty(n->tx_buf))
+  {
+    LOGI(TAG, "disabling TX event. circ buffer empty now");
+    io_driver_no_watch(n->driver, &n->watcher, IO_DRIVER_EVENT_TX);
+    return;
+  }
+
+  // XXX
+  // looping would be more efficient but
+  // on the other hand, this has better time sharing feature
+  //
+  data_size = circ_buffer_get_data_size(n->tx_buf);
+  len = data_size < 128 ? data_size : 128;
+  circ_buffer_peek(n->tx_buf, buffer, len);
+
+  ret = write(n->sd, buffer, len);
+  if(ret <= 0)
+  {
+    // definitely stream got into a trouble
+    io_driver_no_watch(n->driver, &n->watcher, IO_DRIVER_EVENT_TX);
+
+    LOGI(TAG, "XXXXXXXX this should not happen");
+    CRASH();
+    return;
+  }
+
+  circ_buffer_advance(n->tx_buf, ret);
+
+  if(circ_buffer_is_empty(n->tx_buf))
+  {
+    io_driver_no_watch(n->driver, &n->watcher, IO_DRIVER_EVENT_TX);
+  }
+
+  return;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+//
 // I/O driver callbacks
 //
 ///////////////////////////////////////////////////////////////////////////////
@@ -34,27 +103,17 @@ static void
 io_net_generic_callback(io_driver_watcher_t* w, io_driver_event e)
 {
   io_net_t*       n = container_of(w, io_net_t, watcher);
-  int             ret;
-  io_net_event_t  ev;
 
   switch(e)
   {
   case IO_DRIVER_EVENT_RX:
-    ret = read(n->sd, n->rx_buf, n->rx_size);
-    if(ret <= 0)
-    {
-      ev.ev = IO_NET_EVENT_CLOSED;
-    }
-    else
-    {
-      ev.ev = IO_NET_EVENT_RX;
-      ev.r.buf = n->rx_buf;
-      ev.r.len = (uint32_t)ret;
-    }
-    n->cb(n, &ev);
+    io_net_handle_data_rx_event(n);
     break;
 
   case IO_DRIVER_EVENT_TX:
+    io_net_handle_data_tx_event(n);
+    break;
+
   case IO_DRIVER_EVENT_EX:
     LOGE(TAG, "%s spurious event %d\n", __func__, e);
     break;
@@ -285,17 +344,42 @@ io_net_close(io_net_t* n)
 int
 io_net_tx(io_net_t* n, uint8_t* buf, int len)
 {
-  //
-  // FIXME
-  // this should be changed to  event/buffer based TX
-  //
   int nwritten = 0,
       ret;
 
-  while(nwritten < len)
+  if(n->tx_buf == NULL)
   {
-    ret = write(n->sd, &buf[nwritten], len - nwritten);
-    if(ret <= 0)
+    while(nwritten < len)
+    {
+      ret = write(n->sd, &buf[nwritten], len - nwritten);
+      if(ret <= 0)
+      {
+        if(!(errno == EWOULDBLOCK || errno == EAGAIN))
+        {
+          return -1;
+        }
+      }
+      else
+      {
+        return nwritten;
+      }
+    }
+    return nwritten;
+  }
+
+  if(circ_buffer_is_empty(n->tx_buf) == FALSE)
+  {
+    return circ_buffer_put(n->tx_buf, buf, len) == 0 ? nwritten : -1;
+  }
+  else
+  {
+    ret = write(n->sd, buf, len);
+    if(ret == len)
+    {
+      return len;
+    }
+
+    if(ret < 0)
     {
       if(!(errno == EWOULDBLOCK || errno == EAGAIN))
       {
@@ -303,7 +387,15 @@ io_net_tx(io_net_t* n, uint8_t* buf, int len)
       }
     }
   }
-  return nwritten;
+
+  if(circ_buffer_put(n->tx_buf, &buf[ret], len - ret) == FALSE)
+  {
+    return -1;
+  }
+  
+  io_driver_watch(n->driver, &n->watcher, IO_DRIVER_EVENT_TX);
+
+  return -1;
 }
 
 int

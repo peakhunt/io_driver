@@ -5,6 +5,7 @@
 #include <arpa/inet.h>
 
 #include "io_driver.h"
+#include "circ_buffer.h"
 
 #define IO_NET_EVENT_CONNECTED          1
 #define IO_NET_EVENT_RX                 2
@@ -41,14 +42,18 @@ struct __io_net_t
   uint8_t*            rx_buf;
   int                 rx_size;
 
+  circ_buffer_t*      tx_buf;
+
   io_driver_watcher_t   watcher;
   io_driver_t*          driver;
 };
 
 extern int io_net_bind(io_driver_t* driver, io_net_t* n, int port, io_net_callback cb, io_net_alloc alloc,
     uint8_t* rx_buf, int rx_size);
+
 extern int io_net_connect(io_driver_t* driver, io_net_t* n, const char* ip_addr, int port, io_net_callback cb,
     uint8_t* rx_buf, int rx_size);
+
 extern void io_net_close(io_net_t* n);
 extern int io_net_tx(io_net_t* n, uint8_t* buf, int len);
 
