@@ -344,11 +344,12 @@ io_net_close(io_net_t* n)
 int
 io_net_tx(io_net_t* n, uint8_t* buf, int len)
 {
-  int nwritten = 0,
-      ret;
+  int ret;
 
   if(n->tx_buf == NULL)
   {
+    int nwritten = 0;
+
     while(nwritten < len)
     {
       ret = write(n->sd, &buf[nwritten], len - nwritten);
@@ -367,12 +368,18 @@ io_net_tx(io_net_t* n, uint8_t* buf, int len)
     return nwritten;
   }
 
+  // use tx buffer mode
+
   if(circ_buffer_is_empty(n->tx_buf) == FALSE)
   {
-    return circ_buffer_put(n->tx_buf, buf, len) == 0 ? nwritten : -1;
+    // circular buffer is not empty. to maintain message order
+    // can't send on the socket.
+    return circ_buffer_put(n->tx_buf, buf, len) == 0 ? len : -1;
   }
   else
   {
+    // nothing is tx buffer
+    // try to send
     ret = write(n->sd, buf, len);
     if(ret == len)
     {
@@ -388,6 +395,9 @@ io_net_tx(io_net_t* n, uint8_t* buf, int len)
     }
   }
 
+  //
+  // message partially sent. put the rest in circular buffer
+  //
   if(circ_buffer_put(n->tx_buf, &buf[ret], len - ret) == FALSE)
   {
     return -1;
@@ -395,7 +405,7 @@ io_net_tx(io_net_t* n, uint8_t* buf, int len)
   
   io_driver_watch(n->driver, &n->watcher, IO_DRIVER_EVENT_TX);
 
-  return -1;
+  return len;
 }
 
 int
