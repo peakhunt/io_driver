@@ -30,6 +30,16 @@ circ_buffer_init(circ_buffer_t* cb, int size)
   return 0;
 }
 
+void
+circ_buffer_init_with_mem(circ_buffer_t* cb, uint8_t* buf, int size)
+{
+  cb->buffer     = buf;
+  cb->size       = size;
+  cb->begin      = 0;
+  cb->end        = 0;
+  cb->data_size  = 0;
+}
+
 /*
  * de-initializes circular buffer
  * frees buffer used by circular buffer

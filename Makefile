@@ -3,12 +3,14 @@ include Rules.mk
 #######################################
 # list of source files
 ########################################
-LIB_IO_DRIVER_SOURCES =                             \
+LIB_IO_DRIVER_SOURCES = \
 src/io_driver.c \
 src/io_net.c \
 src/io_timer.c \
+src/io_telnet.c \
 src/soft_timer.c \
-src/circ_buffer.c
+src/circ_buffer.c \
+src/telnet_reader.c
 
 #######################################
 C_DEFS  = 
@@ -18,8 +20,8 @@ C_DEFS  =
 #######################################
 C_INCLUDES =                              \
 -Isrc
-
-LIBS = 
+ 
+LIBS =  -Lbuild
 LIBDIR = 
 
 #######################################
@@ -49,7 +51,7 @@ CFLAGS += -g $(C_DEFS) $(C_INCLUDES)
 # Generate dependency information
 CFLAGS += -MMD -MF .dep/$(*F).d
 
-LDFLAGS +=  $(LIBDIR) $(LIBS)
+LDFLAGS +=  $(LIBDIR) $(LIBS) 
 
 #######################################
 # build target
@@ -80,6 +82,26 @@ $(BUILD_DIR)/$(TARGET): $(OBJECTS) Makefile
 $(BUILD_DIR):
 	@echo "MKDIR          $(BUILD_DIR)"
 	$Qmkdir $@
+
+#######################################
+# tests demo
+#######################################
+TEST_TARGETS= \
+$(BUILD_DIR)/cli_server
+
+.PHONY: tests
+tests: $(TEST_TARGETS)
+
+CLI_SERVER_SRC= \
+test/cli_server.c \
+test/cli.c
+CLI_SERVER_OBJS = $(addprefix $(BUILD_DIR)/,$(notdir $(CLI_SERVER_SRC:.c=.o)))
+vpath %.c $(sort $(dir $(CLI_SERVER_SRC)))
+
+$(BUILD_DIR)/cli_server: $(BUILD_DIR)/$(TARGET) $(CLI_SERVER_OBJS)
+	@echo "[LD]         $@"
+	$Q$(CC) $(CLI_SERVER_OBJS) $(LDFLAGS) -o $@ -liodriver
+
 
 #######################################
 # clean up

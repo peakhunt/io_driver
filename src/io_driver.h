@@ -35,12 +35,16 @@ struct __io_driver_watcher
 typedef struct 
 {
   struct list_head      watchers;
+  struct list_head      deferred;
 } io_driver_t;
+
+typedef void (*io_driver_deferred_callback)(void* arg);
 
 extern void io_driver_init(io_driver_t* driver);
 extern void io_driver_run(io_driver_t* driver);
 extern void io_driver_watcher_init(io_driver_watcher_t* watcher, int fd, io_driver_callback cb);
 extern void io_driver_watch(io_driver_t* driver, io_driver_watcher_t* watcher, io_driver_event event);
 extern void io_driver_no_watch(io_driver_t* driver, io_driver_watcher_t* watcher, io_driver_event event);
+extern void io_driver_schedule_at_nextloop(io_driver_t* driver, io_driver_deferred_callback cb, void* arg);
 
 #endif /* !__IO_DRIVER_DEF_H__ */

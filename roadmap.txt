@@ -3,3 +3,5 @@ io_ssl
 io_telnet_ssl
 io_serial
 io_gpio
+io_rtp
+io_rtsp

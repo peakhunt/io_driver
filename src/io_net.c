@@ -1,7 +1,6 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
-
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
@@ -11,6 +10,25 @@
 #include "io_net.h"
 
 static const char* TAG  = "io_net";
+
+static void io_net_callback_enter(io_driver_watcher_t* w, io_driver_event e);
+
+///////////////////////////////////////////////////////////////////////////////
+//
+// io_net memory allocator
+//
+///////////////////////////////////////////////////////////////////////////////
+static inline io_net_t*
+io_net_alloc(void)
+{
+  return calloc(1, sizeof(io_net_t));
+}
+
+static inline void
+io_net_free(io_net_t* n)
+{
+  free(n);
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 //
@@ -30,6 +48,12 @@ sock_util_put_nonblock(int sd)
 // utilities
 //
 ///////////////////////////////////////////////////////////////////////////////
+static inline void
+io_net_exec_callback(io_net_t* n, io_net_event_t* e)
+{
+  n->cb(n, e);
+}
+
 static void
 io_net_handle_data_rx_event(io_net_t* n)
 {
@@ -47,7 +71,8 @@ io_net_handle_data_rx_event(io_net_t* n)
     ev.r.buf = n->rx_buf;
     ev.r.len = (uint32_t)ret;
   }
-  n->cb(n, &ev);
+
+  io_net_exec_callback(n, &ev);
 }
 
 static void
@@ -104,19 +129,14 @@ io_net_generic_callback(io_driver_watcher_t* w, io_driver_event e)
 {
   io_net_t*       n = container_of(w, io_net_t, watcher);
 
-  switch(e)
+  if((e & IO_DRIVER_EVENT_RX))
   {
-  case IO_DRIVER_EVENT_RX:
     io_net_handle_data_rx_event(n);
-    break;
+  }
 
-  case IO_DRIVER_EVENT_TX:
+  if((e & IO_DRIVER_EVENT_TX) && !(n->flags & IO_NET_FLAGS_MARK_DELETED))
+  {
     io_net_handle_data_tx_event(n);
-    break;
-
-  case IO_DRIVER_EVENT_EX:
-    LOGE(TAG, "%s spurious event %d\n", __func__, e);
-    break;
   }
 }
 
@@ -145,7 +165,7 @@ io_net_accept_callback(io_driver_watcher_t* w, io_driver_event e)
     return;
   }
 
-  n = l->alloc(l);
+  n = io_net_alloc();
   if(n == NULL)
   {
     LOGE(TAG, "%s io_net_alloc failed\n", __func__);
@@ -157,17 +177,16 @@ io_net_accept_callback(io_driver_watcher_t* w, io_driver_event e)
   n->sd       = newsd;
   n->cb       = l->cb;
   n->driver   = l->driver;
-  n->rx_buf   = l->rx_buf;
-  n->rx_size  = l->rx_size;
 
-  io_driver_watcher_init(&n->watcher, newsd, io_net_generic_callback);
+  n->target = io_net_generic_callback;
+  io_driver_watcher_init(&n->watcher, newsd, io_net_callback_enter);
 
   io_driver_watch(l->driver, &n->watcher, IO_DRIVER_EVENT_RX);
 
   ev.ev = IO_NET_EVENT_CONNECTED;
   ev.n  = n;
 
-  l->cb(l, &ev);
+  io_net_exec_callback(l, &ev);
 }
 
 static void
@@ -199,7 +218,7 @@ io_net_connect_callback(io_driver_watcher_t* w, io_driver_event e)
     io_driver_watch(n->driver, &n->watcher, IO_DRIVER_EVENT_RX);
   }
   ev.n    = n;
-  n->cb(n, &ev);
+  io_net_exec_callback(n, &ev);
 }
 
 static void
@@ -225,7 +244,8 @@ io_net_udp_callback(io_driver_watcher_t* w, io_driver_event e)
     ev.r.buf  = n->rx_buf;
     ev.r.len  = (uint32_t)ret;
     ev.r.from = &from;
-    n->cb(n, &ev);
+
+    io_net_exec_callback(n, &ev);
     break;
 
   case IO_DRIVER_EVENT_TX:
@@ -235,18 +255,46 @@ io_net_udp_callback(io_driver_watcher_t* w, io_driver_event e)
   }
 }
 
+static void
+io_net_callback_enter(io_driver_watcher_t* w, io_driver_event e)
+{
+  io_net_t*       n = container_of(w, io_net_t, watcher);
+
+  n->flags |= IO_NET_FLAGS_EXECUTING;
+  n->target(w, e);
+  n->flags &= ~IO_NET_FLAGS_EXECUTING;
+
+  if(n->exit)
+  {
+    n->exit(n);
+  }
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 //
 // public interfaces
 //
 ///////////////////////////////////////////////////////////////////////////////
-int
-io_net_bind(io_driver_t* driver, io_net_t* n, int port, io_net_callback cb, io_net_alloc alloc,
-    uint8_t* rx_buf, int rx_size)
+void
+io_net_init(void)
+{
+  // module initializaer
+}
+
+io_net_t*
+io_net_bind(io_driver_t* driver, int port, io_net_callback cb)
 {
   int                   sd;
   const int             on = 1;
   struct sockaddr_in    addr;
+  io_net_t*             n;
+
+  n = io_net_alloc();
+  if(n == NULL)
+  {
+    LOGE(TAG, "%s io_net_alloc failed\n", __func__);
+    goto alloc_failed;
+  }
 
   sd = socket(AF_INET, SOCK_STREAM, 0);
   if(sd < 0)
@@ -272,30 +320,38 @@ io_net_bind(io_driver_t* driver, io_net_t* n, int port, io_net_callback cb, io_n
 
   n->sd       = sd;
   n->cb       = cb;
-  n->alloc    = alloc;
   n->driver   = driver;
-  n->rx_buf   = rx_buf;
-  n->rx_size  = rx_size;
 
-  io_driver_watcher_init(&n->watcher, sd, io_net_accept_callback);
+  n->target = io_net_accept_callback;
+  io_driver_watcher_init(&n->watcher, sd, io_net_callback_enter);
 
   io_driver_watch(driver, &n->watcher, IO_DRIVER_EVENT_RX);
 
-  return 0;
+  return n;
 
 bind_failed:
   close(sd);
 
 socket_failed:
-  return -1;
+  io_net_free(n);
+
+alloc_failed:
+  return NULL;
 }
 
-int
-io_net_connect(io_driver_t* driver, io_net_t* n, const char* ip_addr, int port, io_net_callback cb,
-    uint8_t* rx_buf, int rx_size)
+io_net_t*
+io_net_connect(io_driver_t* driver, const char* ip_addr, int port, io_net_callback cb)
 {
   int                 sd;
   struct sockaddr_in  to;
+  io_net_t*           n;
+
+  n = io_net_alloc();
+  if(n == NULL)
+  {
+    LOGE(TAG, "%s io_net_alloc failed\n", __func__);
+    goto alloc_failed;
+  }
 
   sd = socket(AF_INET, SOCK_STREAM, 0);
   if(sd < 0)
@@ -313,10 +369,9 @@ io_net_connect(io_driver_t* driver, io_net_t* n, const char* ip_addr, int port, 
   n->sd       = sd;
   n->cb       = cb;
   n->driver   = driver;
-  n->rx_buf   = rx_buf;
-  n->rx_size  = rx_size;
 
-  io_driver_watcher_init(&n->watcher, sd, io_net_connect_callback);
+  n->target = io_net_connect_callback;
+  io_driver_watcher_init(&n->watcher, sd, io_net_callback_enter);
 
   io_driver_watch(driver, &n->watcher, IO_DRIVER_EVENT_TX);
 
@@ -326,19 +381,39 @@ io_net_connect(io_driver_t* driver, io_net_t* n, const char* ip_addr, int port, 
   //
   connect(sd, (struct sockaddr*)&to, sizeof(to));
 
-  return 0;
+  return n;
 
 socket_failed:
-  return -1;
+  io_net_free(n);
+
+alloc_failed:
+  return NULL;
+}
+
+static void
+__io_net_close(io_net_t* n)
+{
+  LOGI(TAG, "%s executing delete\n", __func__);
+  io_driver_no_watch(n->driver,
+      &n->watcher,
+      IO_DRIVER_EVENT_RX | IO_DRIVER_EVENT_TX | IO_DRIVER_EVENT_EX);
+  close(n->sd);
+  io_net_free(n);
 }
 
 void
 io_net_close(io_net_t* n)
 {
-  io_driver_no_watch(n->driver,
-      &n->watcher,
-      IO_DRIVER_EVENT_RX | IO_DRIVER_EVENT_TX | IO_DRIVER_EVENT_EX);
-  close(n->sd);
+  if(io_net_is_in_callback(n))
+  {
+    LOGI(TAG, "%s scheduling delete\n", __func__);
+    n->flags |= IO_NET_FLAGS_MARK_DELETED;
+    n->exit = __io_net_close;
+  }
+  else
+  {
+    __io_net_close(n);
+  }
 }
 
 int
@@ -409,8 +484,7 @@ io_net_tx(io_net_t* n, uint8_t* buf, int len)
 }
 
 int
-io_net_udp(io_driver_t* driver, io_net_t* n, int port, io_net_callback cb,
-    uint8_t* rx_buf, int rx_size)
+io_net_udp(io_driver_t* driver, io_net_t* n, int port, io_net_callback cb)
 {
   int                 sd;
   struct sockaddr_in  mine;
@@ -438,10 +512,8 @@ io_net_udp(io_driver_t* driver, io_net_t* n, int port, io_net_callback cb,
   n->cb     = cb;
   n->driver = driver;
 
-  n->rx_buf   = rx_buf;
-  n->rx_size  = rx_size;
-
-  io_driver_watcher_init(&n->watcher, sd, io_net_udp_callback);
+  n->target = io_net_udp_callback;
+  io_driver_watcher_init(&n->watcher, sd, io_net_callback_enter);
   io_driver_watch(driver, &n->watcher, IO_DRIVER_EVENT_RX);
 
   return 0;
@@ -455,7 +527,7 @@ socket_failed:
 }
 
 int
-io_net_tx_udp(io_net_t* n, struct sockaddr_in* to, uint8_t* buf, int len)
+io_net_udp_tx(io_net_t* n, struct sockaddr_in* to, uint8_t* buf, int len)
 {
   ssize_t ret;
 

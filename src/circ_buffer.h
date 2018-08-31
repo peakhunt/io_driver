@@ -16,6 +16,7 @@ typedef struct
 } circ_buffer_t;
 
 extern int circ_buffer_init(circ_buffer_t* cb, int size);
+extern void circ_buffer_init_with_mem(circ_buffer_t* cb, uint8_t* buf, int size);
 extern void circ_buffer_deinit(circ_buffer_t* cb);
 extern int circ_buffer_put(circ_buffer_t* cb, uint8_t* buf, int size);
 extern int circ_buffer_get(circ_buffer_t* cb, uint8_t* buf, int size);

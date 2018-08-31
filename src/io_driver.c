@@ -1,5 +1,5 @@
 #include <string.h>
-
+#include <stdlib.h>
 #include <sys/select.h>
 #include <sys/time.h>
 #include <sys/types.h>
@@ -20,11 +20,40 @@ typedef struct
   int         maxfd;
 } select_call_arg_t;
 
+typedef struct
+{
+  struct list_head              le;
+  io_driver_deferred_callback   cb;
+  void*                         arg;
+} deferred_exec_t;
+
 ///////////////////////////////////////////////////////////////////////////////
 //
 // private utilities
 //
 ///////////////////////////////////////////////////////////////////////////////
+static void
+io_driver_exec_deferred(io_driver_t* driver)
+{
+  struct list_head        deferred_list;
+  deferred_exec_t*        d;
+
+  INIT_LIST_HEAD(&deferred_list);
+
+  list_splice_init(&driver->deferred, &deferred_list);
+
+  while(!list_empty(&deferred_list))
+  {
+    d = list_first_entry(&deferred_list, deferred_exec_t, le);
+
+    list_del_init(&d->le);
+
+    d->cb(d->arg);
+
+    free(d);
+  }
+}
+
 static void
 io_driver_preselect(io_driver_t* driver, select_call_arg_t* s)
 {
@@ -91,6 +120,7 @@ io_driver_postselect(io_driver_t* driver, select_call_arg_t* s)
   //
   io_driver_watcher_t*    watcher;
   struct list_head        run_list;
+  io_driver_event         e;
 
   INIT_LIST_HEAD(&run_list);
 
@@ -103,19 +133,26 @@ io_driver_postselect(io_driver_t* driver, select_call_arg_t* s)
     list_del_init(&watcher->le);
     list_add_tail(&watcher->le, &driver->watchers);
 
+    e = 0x0;
+
     if((watcher->event_listening & IO_DRIVER_EVENT_RX) && FD_ISSET(watcher->fd, &s->rset))
     {
-      watcher->callback(watcher, IO_DRIVER_EVENT_RX);
+      e |= IO_DRIVER_EVENT_RX;
     }
 
     if((watcher->event_listening & IO_DRIVER_EVENT_TX) && FD_ISSET(watcher->fd, &s->wset))
     {
-      watcher->callback(watcher, IO_DRIVER_EVENT_TX);
+      e |= IO_DRIVER_EVENT_TX;
     }
 
     if((watcher->event_listening & IO_DRIVER_EVENT_EX) && FD_ISSET(watcher->fd, &s->eset))
     {
-      watcher->callback(watcher, IO_DRIVER_EVENT_EX);
+      e |= IO_DRIVER_EVENT_EX;
+    }
+
+    if(e != 0x00)
+    {
+      watcher->callback(watcher, e);
     }
   }
 }
@@ -129,6 +166,7 @@ void
 io_driver_init(io_driver_t* driver)
 {
   INIT_LIST_HEAD(&driver->watchers);
+  INIT_LIST_HEAD(&driver->deferred);
 }
 
 void
@@ -142,6 +180,7 @@ io_driver_run(io_driver_t* driver)
   };
   int                     ret;
 
+  io_driver_exec_deferred(driver);
   io_driver_preselect(driver, &s);
 
   ret = select(s.maxfd + 1,
@@ -198,4 +237,26 @@ io_driver_no_watch(io_driver_t* driver, io_driver_watcher_t* watcher, io_driver_
   {
     list_del_init(&watcher->le);
   }
+}
+
+void
+io_driver_schedule_at_nextloop(io_driver_t* driver, io_driver_deferred_callback cb, void* arg)
+{
+  deferred_exec_t* d;
+
+  //
+  // FIXME change this code to pool based allocation
+  //
+  d = malloc(sizeof(deferred_exec_t));
+  if(d == NULL)
+  {
+    LOGE(TAG, "%s failed to malloc\n", __func__);
+    return;
+  }
+
+  INIT_LIST_HEAD(&d->le);
+  d->cb   = cb;
+  d->arg  = arg;
+
+  list_add_tail(&d->le, &driver->deferred);
 }
