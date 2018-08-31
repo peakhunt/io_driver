@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <stdint.h>
+#include <time.h>
 
 #include "generic_list.h"
 
@@ -32,7 +33,7 @@ typedef uint8_t bool;
 #define MIN(a,b)      (a < b ? a : b)
 #define MAX(a,b)      (a > b ? a : b)
 
-#define LOGI(tag, str, ...)       printf("%s:"str, tag, ##__VA_ARGS__); fflush(stdout)
-#define LOGE(tag, str, ...)       printf("%s:"str, tag, ##__VA_ARGS__); fflush(stdout)
+#define LOGI(tag, str, ...)       printf("%lu:%s:"str, time(NULL), tag, ##__VA_ARGS__); fflush(stdout)
+#define LOGE(tag, str, ...)       printf("%lu:%s:"str, time(NULL), tag, ##__VA_ARGS__); fflush(stdout)
 
 #endif /* !__COMMON_DEF_H__ */

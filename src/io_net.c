@@ -213,6 +213,8 @@ io_net_connect_callback(io_driver_watcher_t* w, io_driver_event e)
   else
   {
     // connect success
+    n->target = io_net_generic_callback;
+
     ev.ev = IO_NET_EVENT_CONNECTED;
     io_driver_no_watch(n->driver, &n->watcher, IO_DRIVER_EVENT_TX);
     io_driver_watch(n->driver, &n->watcher, IO_DRIVER_EVENT_RX);
@@ -307,8 +309,9 @@ io_net_bind(io_driver_t* driver, int port, io_net_callback cb)
   setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
 
   memset(&addr, 0, sizeof(addr));
-  addr.sin_addr.s_addr = INADDR_ANY;
-  addr.sin_port = htons(port);
+  addr.sin_family       = AF_INET;
+  addr.sin_addr.s_addr  = INADDR_ANY;
+  addr.sin_port         = htons(port);
 
   if(bind(sd, (struct sockaddr*)&addr, sizeof(addr)) != 0)
   {
@@ -363,8 +366,9 @@ io_net_connect(io_driver_t* driver, const char* ip_addr, int port, io_net_callba
   sock_util_put_nonblock(sd);
 
   memset(&to, 0, sizeof(to));
-  to.sin_addr.s_addr = inet_addr(ip_addr);
-  to.sin_port = htons(port);
+  to.sin_family       = AF_INET;
+  to.sin_addr.s_addr  = inet_addr(ip_addr);
+  to.sin_port         = htons(port);
 
   n->sd       = sd;
   n->cb       = cb;
@@ -499,6 +503,7 @@ io_net_udp(io_driver_t* driver, io_net_t* n, int port, io_net_callback cb)
   sock_util_put_nonblock(sd);
 
   memset(&mine, 0, sizeof(mine));
+  mine.sin_family       = AF_INET;
   mine.sin_addr.s_addr  = INADDR_ANY;
   mine.sin_port         = htons(port);
 

@@ -87,7 +87,8 @@ $(BUILD_DIR):
 # tests demo
 #######################################
 TEST_TARGETS= \
-$(BUILD_DIR)/cli_server
+$(BUILD_DIR)/cli_server \
+$(BUILD_DIR)/cli_client \
 
 .PHONY: tests
 tests: $(TEST_TARGETS)
@@ -101,6 +102,15 @@ vpath %.c $(sort $(dir $(CLI_SERVER_SRC)))
 $(BUILD_DIR)/cli_server: $(BUILD_DIR)/$(TARGET) $(CLI_SERVER_OBJS)
 	@echo "[LD]         $@"
 	$Q$(CC) $(CLI_SERVER_OBJS) $(LDFLAGS) -o $@ -liodriver
+
+CLI_CLIENT_SRC= \
+test/cli_client.c
+CLI_CLIENT_OBJS = $(addprefix $(BUILD_DIR)/,$(notdir $(CLI_CLIENT_SRC:.c=.o)))
+vpath %.c $(sort $(dir $(CLI_CLIENT_SRC)))
+
+$(BUILD_DIR)/cli_client: $(BUILD_DIR)/$(TARGET) $(CLI_CLIENT_OBJS)
+	@echo "[LD]         $@"
+	$Q$(CC) $(CLI_CLIENT_OBJS) $(LDFLAGS) -o $@ -liodriver
 
 
 #######################################
