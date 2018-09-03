@@ -6,11 +6,11 @@ include Rules.mk
 LIB_IO_DRIVER_SOURCES = \
 src/io_driver.c \
 src/io_net.c \
-src/io_timer.c \
 src/io_telnet.c \
+src/io_timer.c \
 src/soft_timer.c \
-src/circ_buffer.c \
-src/telnet_reader.c
+src/telnet_reader.c \
+src/circ_buffer.c
 
 #######################################
 C_DEFS  = 
@@ -87,8 +87,8 @@ $(BUILD_DIR):
 # tests demo
 #######################################
 TEST_TARGETS= \
-$(BUILD_DIR)/cli_server \
-$(BUILD_DIR)/cli_client \
+$(BUILD_DIR)/cli_server  \
+$(BUILD_DIR)/cli_client
 
 .PHONY: tests
 tests: $(TEST_TARGETS)

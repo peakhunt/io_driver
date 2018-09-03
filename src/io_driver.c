@@ -33,28 +33,6 @@ typedef struct
 //
 ///////////////////////////////////////////////////////////////////////////////
 static void
-io_driver_exec_deferred(io_driver_t* driver)
-{
-  struct list_head        deferred_list;
-  deferred_exec_t*        d;
-
-  INIT_LIST_HEAD(&deferred_list);
-
-  list_splice_init(&driver->deferred, &deferred_list);
-
-  while(!list_empty(&deferred_list))
-  {
-    d = list_first_entry(&deferred_list, deferred_exec_t, le);
-
-    list_del_init(&d->le);
-
-    d->cb(d->arg);
-
-    free(d);
-  }
-}
-
-static void
 io_driver_preselect(io_driver_t* driver, select_call_arg_t* s)
 {
   io_driver_watcher_t*   watcher;
@@ -166,7 +144,6 @@ void
 io_driver_init(io_driver_t* driver)
 {
   INIT_LIST_HEAD(&driver->watchers);
-  INIT_LIST_HEAD(&driver->deferred);
 }
 
 void
@@ -180,7 +157,6 @@ io_driver_run(io_driver_t* driver)
   };
   int                     ret;
 
-  io_driver_exec_deferred(driver);
   io_driver_preselect(driver, &s);
 
   ret = select(s.maxfd + 1,
@@ -237,26 +213,4 @@ io_driver_no_watch(io_driver_t* driver, io_driver_watcher_t* watcher, io_driver_
   {
     list_del_init(&watcher->le);
   }
-}
-
-void
-io_driver_schedule_at_nextloop(io_driver_t* driver, io_driver_deferred_callback cb, void* arg)
-{
-  deferred_exec_t* d;
-
-  //
-  // FIXME change this code to pool based allocation
-  //
-  d = malloc(sizeof(deferred_exec_t));
-  if(d == NULL)
-  {
-    LOGE(TAG, "%s failed to malloc\n", __func__);
-    return;
-  }
-
-  INIT_LIST_HEAD(&d->le);
-  d->cb   = cb;
-  d->arg  = arg;
-
-  list_add_tail(&d->le, &driver->deferred);
 }

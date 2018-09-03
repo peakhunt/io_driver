@@ -8,7 +8,6 @@
 #include "cli.h"
 
 extern void cli_telnet_intf_init(int port);
-extern void cli_telnet_show_connections(cli_intf_t* intf);
 
 ////////////////////////////////////////////////////////////////////////////////
 //
@@ -25,10 +24,10 @@ extern void cli_telnet_show_connections(cli_intf_t* intf);
 // private prototypes
 //
 ////////////////////////////////////////////////////////////////////////////////
-static void cli_command_help(cli_intf_t* intf, int argc, const char** argv);
-static void cli_command_version(cli_intf_t* intf, int argc, const char** argv);
-static void cli_command_cli_connections(cli_intf_t* intf, int argc, const char** argv);
-static void cli_command_exit(cli_intf_t* intf, int argc, const char** argv);
+static int cli_command_help(cli_intf_t* intf, int argc, const char** argv);
+static int cli_command_version(cli_intf_t* intf, int argc, const char** argv);
+static int cli_command_cli_connections(cli_intf_t* intf, int argc, const char** argv);
+static int cli_command_exit(cli_intf_t* intf, int argc, const char** argv);
 
 ////////////////////////////////////////////////////////////////////////////////
 //
@@ -72,7 +71,7 @@ static const char*      _prompt = "\r\npRTP> ";
 // core cli command handlers
 //
 ////////////////////////////////////////////////////////////////////////////////
-static void
+static int
 cli_command_help(cli_intf_t* intf, int argc, const char** argv)
 {
   size_t i;
@@ -90,25 +89,30 @@ cli_command_help(cli_intf_t* intf, int argc, const char** argv)
     cli_printf(intf, "%-20s: ", _user_commands[i].command);
     cli_printf(intf, "%s"CLI_EOL, _user_commands[i].help_str);
   }
+
+  return 0;
 }
 
-static void
+static int
 cli_command_version(cli_intf_t* intf, int argc, const char** argv)
 {
   cli_printf(intf, CLI_EOL);
   cli_printf(intf, "%s"CLI_EOL, VERSION);
+
+  return 0;
 }
 
-static void
+static int
 cli_command_cli_connections(cli_intf_t* intf, int argc, const char** argv)
 {
-  // cli_telnet_show_connections(intf);
+  return 0;
 }
 
-static void
+static int
 cli_command_exit(cli_intf_t* intf, int argc, const char** argv)
 {
   intf->exit(intf);
+  return -1;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -116,7 +120,7 @@ cli_command_exit(cli_intf_t* intf, int argc, const char** argv)
 // cli core
 //
 ////////////////////////////////////////////////////////////////////////////////
-static void
+static int
 cli_execute_command(cli_intf_t* intf, char* cmd)
 {
   static const char*    argv[CLI_COMMAND_MAX_ARGS];
@@ -129,14 +133,14 @@ cli_execute_command(cli_intf_t* intf, char* cmd)
     if(argc >= CLI_COMMAND_MAX_ARGS)
     {
       cli_printf(intf, CLI_EOL"Error: too many arguments"CLI_EOL);
-      return;
+      return 0;
     }
     argv[argc++] = s;
   }
 
   if(argc == 0)
   {
-    return;
+    return 0;
   }
 
   for(i = 0; i < sizeof(_core_commands)/sizeof(cli_command_t); i++)
@@ -144,8 +148,7 @@ cli_execute_command(cli_intf_t* intf, char* cmd)
     if(strcmp(_core_commands[i].command, argv[0]) == 0)
     {
       cli_printf(intf, CLI_EOL"Executing %s"CLI_EOL, argv[0]);
-      _core_commands[i].handler(intf, argc, argv);
-      return;
+      return _core_commands[i].handler(intf, argc, argv);
     }
   }
 
@@ -154,13 +157,13 @@ cli_execute_command(cli_intf_t* intf, char* cmd)
     if(strcmp(_user_commands[i].command, argv[0]) == 0)
     {
       cli_printf(intf, CLI_EOL"Executing %s"CLI_EOL, argv[0]);
-      _user_commands[i].handler(intf, argc, argv);
-      return;
+      return _user_commands[i].handler(intf, argc, argv);
     }
   }
   cli_printf(intf, "%s", CLI_EOL"Unknown Command: ");
   cli_printf(intf, "%s", argv[0]);
   cli_printf(intf, "%s", CLI_EOL);
+  return 0;
 }
 
 void
@@ -196,7 +199,7 @@ cli_init(cli_command_t* cmds, int num_cmds, int port)
   // cli_telnet_intf_init(port);
 }
 
-void
+int
 cli_handle_rx(cli_intf_t* intf, uint8_t* data, int len)
 {
   char    b;
@@ -227,12 +230,16 @@ cli_handle_rx(cli_intf_t* intf, uint8_t* data, int len)
     {
       intf->cmd_buffer[intf->cmd_buffer_ndx++] = '\0';
 
-      cli_execute_command(intf, (char*)intf->cmd_buffer);
+      if(cli_execute_command(intf, (char*)intf->cmd_buffer) == -1)
+      {
+        return -1;
+      }
 
       intf->cmd_buffer_ndx = 0;
       cli_prompt(intf);
     }
   }
+  return 0;
 }
 
 void

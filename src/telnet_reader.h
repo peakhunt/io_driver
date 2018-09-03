@@ -17,8 +17,12 @@ typedef enum
   telnet_reader_state_wait_for_se,
 } telnet_reader_state_t;
 
-typedef void (*telnet_data_callback)(telnet_reader_t* tr, uint8_t data);
-typedef void (*telnet_cmd_callback)(telnet_reader_t* tr);
+//
+// return 0 : continue
+//       -1 : abort
+//
+typedef int (*telnet_data_callback)(telnet_reader_t* tr, uint8_t data);
+typedef int (*telnet_cmd_callback)(telnet_reader_t* tr);
 
 struct __telnet_reader
 {
@@ -37,6 +41,6 @@ struct __telnet_reader
 
 extern void telnet_reader_init(telnet_reader_t* tr);
 extern void telnet_reader_deinit(telnet_reader_t* tr);
-extern void telnet_reader_feed(telnet_reader_t* tr, uint8_t c);
+extern int telnet_reader_feed(telnet_reader_t* tr, uint8_t c);
 
 #endif /* !__TELNET_READER_DEF_H__ */

@@ -25,7 +25,7 @@ struct __cli_intf
   struct list_head      le;
 };
 
-typedef void (*cli_command_handler)(cli_intf_t* intf, int argc, const char** argv);
+typedef int (*cli_command_handler)(cli_intf_t* intf, int argc, const char** argv);
 typedef struct
 {
   const char*         command;
@@ -34,7 +34,7 @@ typedef struct
 } cli_command_t;
 
 extern void cli_init(cli_command_t* cmds, int num_cmds, int port);
-extern void cli_handle_rx(cli_intf_t* intf, uint8_t* data, int len);
+extern int cli_handle_rx(cli_intf_t* intf, uint8_t* data, int len);
 extern void cli_intf_register(cli_intf_t* intf);
 extern void cli_intf_unregister(cli_intf_t* intf);
 

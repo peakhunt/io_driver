@@ -56,9 +56,11 @@ telnet_reader_handle_subcommand(telnet_reader_t* tr, uint8_t d)
   return TRUE;
 }
 
-static void
+static int
 telnet_reader_state_machine(telnet_reader_t* tr, uint8_t d)
 {
+  int ret = 0;
+
   switch(tr->state)
   {
   case telnet_reader_state_start:
@@ -68,7 +70,7 @@ telnet_reader_state_machine(telnet_reader_t* tr, uint8_t d)
     }
     else
     {
-      tr->databack(tr, d);
+      ret = tr->databack(tr, d);
     }
     break;
 
@@ -76,7 +78,7 @@ telnet_reader_state_machine(telnet_reader_t* tr, uint8_t d)
     if(d == IAC)
     {
       telnet_reader_move_state(tr, telnet_reader_state_start);
-      tr->databack(tr, IAC);
+      ret = tr->databack(tr, IAC);
     }
     else
     {
@@ -90,7 +92,7 @@ telnet_reader_state_machine(telnet_reader_t* tr, uint8_t d)
 
   case telnet_reader_state_rx_do_dont_will_wont:
     tr->opt = d;
-    tr->cmdback(tr);
+    ret = tr->cmdback(tr);
     telnet_reader_move_state(tr, telnet_reader_state_start);
     break;
 
@@ -98,18 +100,18 @@ telnet_reader_state_machine(telnet_reader_t* tr, uint8_t d)
     if(telnet_reader_handle_subcommand(tr, d) == FALSE)
     {
       telnet_reader_move_state(tr, telnet_reader_state_start);
-      return;
     }
     break;
 
   case telnet_reader_state_wait_for_se:
     if(d == SE)
     {
-      tr->cmdback(tr);
+      ret = tr->cmdback(tr);
     }
     telnet_reader_move_state(tr, telnet_reader_state_start);
     break;
   }
+  return ret;
 }
 
 void
@@ -124,8 +126,8 @@ telnet_reader_deinit(telnet_reader_t* tr)
 {
 }
 
-void
+int
 telnet_reader_feed(telnet_reader_t* tr, uint8_t c)
 {
-  telnet_reader_state_machine(tr, c);
+  return telnet_reader_state_machine(tr, c);
 }
