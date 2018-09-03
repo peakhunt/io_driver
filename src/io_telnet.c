@@ -86,9 +86,9 @@ io_telnet_server_callback(io_net_t* n, io_net_event_t* e)
       return io_net_return_stop;
     }
 
-    nt = ev.n;
-    nt->cb = t->cb;
-    e->n = &nt->n;
+    nt      = ev.n;
+    nt->cb  = t->cb;
+    e->n    = &nt->n;
     return io_net_return_continue;
 
   case io_net_event_enum_connected:
@@ -110,6 +110,11 @@ io_telnet_server_callback(io_net_t* n, io_net_event_t* e)
       }
     }
     return io_net_return_continue;
+
+  case io_net_event_enum_tx:
+    LOGE(TAG, "BUG!!!! Unexpected Event\n");
+    CRASH();
+    break;
 
   case io_net_event_enum_closed:
     ev.ev = io_net_event_enum_closed;

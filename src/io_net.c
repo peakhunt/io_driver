@@ -115,7 +115,17 @@ io_net_generic_callback(io_driver_watcher_t* w, io_driver_event e)
 
   if((e & IO_DRIVER_EVENT_TX))
   {
-    io_net_handle_data_tx_event(n);
+    if(n->tx_buf)
+    {
+      io_net_handle_data_tx_event(n);
+    }
+    else
+    {
+      io_net_event_t    ev;
+
+      ev.ev = io_net_event_enum_tx;
+      n->cb(n, &ev);
+    }
   }
 }
 
@@ -347,6 +357,7 @@ io_net_tx(io_net_t* n, uint8_t* buf, int len)
 
   if(n->tx_buf == NULL)
   {
+#if 0
     int nwritten = 0;
 
     while(nwritten < len)
@@ -365,6 +376,9 @@ io_net_tx(io_net_t* n, uint8_t* buf, int len)
       }
     }
     return nwritten;
+#else
+    return write(n->sd, buf, len);
+#endif
   }
 
   // use tx buffer mode

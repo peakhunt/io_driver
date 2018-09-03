@@ -12,6 +12,7 @@ typedef enum
   io_net_event_enum_alloc_connection,
   io_net_event_enum_connected,
   io_net_event_enum_rx,
+  io_net_event_enum_tx,
   io_net_event_enum_closed,
 } io_net_event_enum_t;
 
