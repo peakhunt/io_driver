@@ -41,13 +41,11 @@ typedef enum
 } io_net_return_t;
 
 typedef io_net_return_t (*io_net_callback)(io_net_t* n, io_net_event_t* e);
-typedef io_net_t* (*io_net_alloc)(io_net_t* n);
 
 struct __io_net_t
 {
   int                   sd;
   io_net_callback       cb;
-  io_net_alloc          alloc;
   io_driver_watcher_t   watcher;
   io_driver_t*          driver;
 

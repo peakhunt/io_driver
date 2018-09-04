@@ -129,6 +129,9 @@ telnet_server_callback(io_telnet_t* t, io_telnet_event_t* e)
     LOGI(TAG, "Close event :\n");
     dealloc_cli_connection(c);
     return io_net_return_stop;
+
+  default:
+    break;
   }
   return io_net_return_continue;
 }

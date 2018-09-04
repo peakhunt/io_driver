@@ -174,7 +174,7 @@ io_net_accept_callback(io_driver_watcher_t* w, io_driver_event e)
   n->driver   = l->driver;
 
   io_driver_watcher_init(&n->watcher, newsd, io_net_generic_callback);
-  io_driver_watch(l->driver, &n->watcher, IO_DRIVER_EVENT_RX);
+  io_driver_watch(n->driver, &n->watcher, IO_DRIVER_EVENT_RX);
 
   ev.ev = io_net_event_enum_connected;
   ev.n  = NULL;
@@ -372,7 +372,7 @@ io_net_tx(io_net_t* n, uint8_t* buf, int len)
       }
       else
       {
-        return nwritten;
+        nwritten += ret;
       }
     }
     return nwritten;
