@@ -118,6 +118,10 @@ io_telnet_server_callback(io_net_t* n, io_net_event_t* e)
     ev.ev = io_net_event_enum_closed;
     ev.n  = NULL;
     return t->cb(t, &ev);
+
+  case io_net_event_enum_handshaken:
+    // FIXME
+    break;
   }
 
   return io_net_return_continue;

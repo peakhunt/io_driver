@@ -162,74 +162,98 @@ io_ssl_generic_callback(io_driver_watcher_t* w, io_driver_event e)
 {
   io_ssl_t*       s = container_of(w, io_ssl_t, watcher);
   int             ret;
-  uint8_t         done = FALSE;
   io_ssl_event_t  ev;
 
   if((e & IO_DRIVER_EVENT_RX))
   {
-    LOGI(TAG, "rx handler begin\n");
-    while(!done)
+    ret = mbedtls_ssl_read(&s->ssl, s->rx_buf, s->rx_size);
+    if(ret <= 0)
     {
-      if(s->handshaking)
+      switch(ret)
       {
-        ret = mbedtls_ssl_handshake(&s->ssl);
-        switch(ret)
-        {
-        case 0:   // handshake done
-          LOGI(TAG, "handshake done\n");
-          //
-          // XXX handshake complete event
-          //
-          s->handshaking = FALSE;
-          break;
+      case MBEDTLS_ERR_SSL_WANT_READ:
+        break;
 
-        case MBEDTLS_ERR_SSL_WANT_READ:
-        case MBEDTLS_ERR_SSL_WANT_WRITE:
-          done = TRUE;
-          break;
+      case MBEDTLS_ERR_SSL_WANT_WRITE:
+        LOGI(TAG, "%s activating TX event\n", __func__);
+        io_driver_watch(s->driver, &s->watcher, IO_DRIVER_EVENT_TX);
+        return;
 
-        default:  // error
-          LOGE(TAG, "handshake failed %x\n", -ret);
-          ev.ev = io_net_event_enum_closed;
-          s->cb(s, &ev);
-          done = TRUE;
-          break;
-        }
-      }
-      else
-      {
-        ret = mbedtls_ssl_read(&s->ssl, s->rx_buf, s->rx_size);
-        if(ret <= 0)
-        {
-          switch(ret)
-          {
-          case MBEDTLS_ERR_SSL_WANT_READ:
-          case MBEDTLS_ERR_SSL_WANT_WRITE:
-            done = TRUE;
-            break;
-
-          case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
-          case MBEDTLS_ERR_NET_CONN_RESET:
-          default:
-            LOGE(TAG, "ssl connection error %x\n", -ret);
-            ev.ev = io_net_event_enum_closed;
-            s->cb(s, &ev);
-            done = TRUE;
-            break;
-          }
-        }
-        else
-        {
-          ev.ev = io_net_event_enum_rx;
-          ev.r.buf = s->rx_buf;
-          ev.r.len = (uint32_t)ret;
-          if(s->cb(s, &ev) == io_net_return_stop)
-          {
-            done = TRUE;
-          }
-        }
+      case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
+      case MBEDTLS_ERR_NET_CONN_RESET:
+      default:
+        LOGE(TAG, "ssl connection error %x\n", -ret);
+        ev.ev = io_net_event_enum_closed;
+        s->cb(s, &ev);
+        return;
       }
     }
+    else
+    {
+      ev.ev = io_net_event_enum_rx;
+      ev.r.buf = s->rx_buf;
+      ev.r.len = (uint32_t)ret;
+      if(s->cb(s, &ev) == io_net_return_stop)
+      {
+        return;
+      }
+    }
+  }
+
+  if((e & IO_DRIVER_EVENT_TX))
+  {
+    //
+    // XXX
+    // what if mbedtls wants to tx? How should I notify mbedtls of tx availability???
+    //
+    LOGI(TAG, "%s deactivating TX event\n", __func__);
+    io_driver_no_watch(s->driver, &s->watcher, IO_DRIVER_EVENT_TX);
+
+    ev.ev = io_net_event_enum_tx;
+    s->cb(s, &ev);
+  }
+}
+
+static void
+io_ssl_handshake_callback(io_driver_watcher_t* w, io_driver_event e)
+{
+  io_ssl_t*       s = container_of(w, io_ssl_t, watcher);
+  int             ret;
+  io_ssl_event_t  ev;
+
+  // blindly disable TX that might have been set
+  io_driver_no_watch(s->driver, &s->watcher, IO_DRIVER_EVENT_TX);
+
+  ret = mbedtls_ssl_handshake(&s->ssl);
+  switch(ret)
+  {
+  case 0:   // handshake done
+    LOGI(TAG, "handshake done\n");
+    s->handshaking = FALSE;
+
+    io_driver_watcher_set_cb(&s->watcher, io_ssl_generic_callback);
+
+    ev.ev = io_net_event_enum_handshaken;
+    if(s->cb(s, &ev) != io_net_return_stop)
+    {
+      io_ssl_generic_callback(w, e);
+    }
+    break;
+
+  case MBEDTLS_ERR_SSL_WANT_READ:
+    // RX watch is always enabled
+    break;
+
+  case MBEDTLS_ERR_SSL_WANT_WRITE:
+    LOGI(TAG, "%s activating TX event\n", __func__);
+    io_driver_watch(s->driver, &s->watcher, IO_DRIVER_EVENT_TX);
+    break;
+
+  default:  // error
+    LOGE(TAG, "handshake failed %x\n", -ret);
+    ev.ev = io_net_event_enum_closed;
+    s->cb(s, &ev);
+    break;
   }
 }
 
@@ -280,7 +304,7 @@ io_ssl_accept_callback(io_driver_watcher_t* w, io_driver_event e)
   io_ssl_mbedtls_init_accepted(l, n);
   n->handshaking = TRUE;
 
-  io_driver_watcher_init(&n->watcher, newsd, io_ssl_generic_callback);
+  io_driver_watcher_init(&n->watcher, newsd, io_ssl_handshake_callback);
   io_driver_watch(n->driver, &n->watcher, IO_DRIVER_EVENT_RX);
 
   ev.ev = io_net_event_enum_connected;
@@ -351,25 +375,25 @@ socket_failed:
 int
 io_ssl_tx(io_ssl_t* s, uint8_t* buf, int len)
 {
-  int nwritten = 0;
   int ret;
 
-  while(nwritten < len)
+  if(s->handshaking)
   {
-    ret = mbedtls_ssl_write(&s->ssl, &buf[nwritten], len - nwritten);
-    if(ret <= 0)
-    {
-      if(ret != MBEDTLS_ERR_SSL_WANT_WRITE)
-      {
-        return -1;
-      }
-    }
-    else
-    {
-      nwritten += ret;
-    }
+    LOGE(TAG,"%s called during handshaking\n", __func__);
+    return -1;
   }
-  return nwritten;
+
+  ret = mbedtls_ssl_write(&s->ssl, buf, len);
+  if(ret <= 0)
+  {
+    if(ret != MBEDTLS_ERR_SSL_WANT_WRITE)
+    {
+      return -1;
+    }
+    LOGI(TAG, "%s activating TX event\n", __func__);
+    io_driver_watch(s->driver, &s->watcher, IO_DRIVER_EVENT_TX);
+  }
+  return ret;
 }
 
 void
