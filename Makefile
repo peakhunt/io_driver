@@ -90,7 +90,8 @@ $(BUILD_DIR):
 TEST_TARGETS= \
 $(BUILD_DIR)/cli_server  \
 $(BUILD_DIR)/cli_client  \
-$(BUILD_DIR)/ssl_server
+$(BUILD_DIR)/ssl_server  \
+$(BUILD_DIR)/ssl_client
 
 .PHONY: tests
 tests: $(TEST_TARGETS)
@@ -122,6 +123,15 @@ vpath %.c $(sort $(dir $(SSL_SERVER_SRC)))
 $(BUILD_DIR)/ssl_server: $(BUILD_DIR)/$(TARGET) $(SSL_SERVER_OBJS)
 	@echo "[LD]         $@"
 	$Q$(CC) $(SSL_SERVER_OBJS) $(LDFLAGS) -o $@ -liodriver -lmbedtls -lmbedx509 -lmbedcrypto
+
+SSL_CLIENT_SRC= \
+test/ssl_client.c
+SSL_CLIENT_OBJS = $(addprefix $(BUILD_DIR)/,$(notdir $(SSL_CLIENT_SRC:.c=.o)))
+vpath %.c $(sort $(dir $(SSL_CLIENT_SRC)))
+
+$(BUILD_DIR)/ssl_client: $(BUILD_DIR)/$(TARGET) $(SSL_CLIENT_OBJS)
+	@echo "[LD]         $@"
+	$Q$(CC) $(SSL_CLIENT_OBJS) $(LDFLAGS) -o $@ -liodriver -lmbedtls -lmbedx509 -lmbedcrypto
 
 
 #######################################

@@ -62,7 +62,7 @@ struct __io_ssl_t
   io_driver_t*              driver;
 
   mbedtls_net_context       mbed_fd;
-  mbedtls_x509_crt          srvcert;
+  mbedtls_x509_crt          cacert;
   mbedtls_ssl_config        conf;
   mbedtls_ssl_context       ssl;
   mbedtls_entropy_context   entropy;
@@ -76,6 +76,7 @@ struct __io_ssl_t
 };
 
 extern int io_ssl_bind(io_driver_t* driver, io_ssl_t* s, int port, io_ssl_callback cb);
+extern int io_ssl_connect(io_driver_t* driver, io_ssl_t* s, const char* ip_addr, int port, io_ssl_callback cb);
 extern int io_ssl_tx(io_ssl_t* s, uint8_t* buf, int len);
 extern void io_ssl_close(io_ssl_t* s);
 

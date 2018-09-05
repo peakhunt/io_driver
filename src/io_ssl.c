@@ -48,7 +48,7 @@ io_ssl_mbedtls_init_server(io_ssl_t* s)
   mbedtls_ssl_config_init(&s->conf);
   mbedtls_entropy_init(&s->entropy);
   mbedtls_pk_init(&s->pkey);
-  mbedtls_x509_crt_init(&s->srvcert);
+  mbedtls_x509_crt_init(&s->cacert);
   mbedtls_ctr_drbg_init(&s->ctr_drbg);
 
   ret = mbedtls_ctr_drbg_seed(&s->ctr_drbg, mbedtls_entropy_func, &s->entropy,
@@ -59,7 +59,7 @@ io_ssl_mbedtls_init_server(io_ssl_t* s)
     return -1;
   }
 
-  ret = mbedtls_x509_crt_parse( &s->srvcert, (const unsigned char *) mbedtls_test_srv_crt,
+  ret = mbedtls_x509_crt_parse( &s->cacert, (const unsigned char *) mbedtls_test_srv_crt,
       mbedtls_test_srv_crt_len );
   if(ret != 0)
   {
@@ -67,7 +67,7 @@ io_ssl_mbedtls_init_server(io_ssl_t* s)
     return -1;
   }
 
-  ret = mbedtls_x509_crt_parse(&s->srvcert, (const unsigned char *) mbedtls_test_cas_pem,
+  ret = mbedtls_x509_crt_parse(&s->cacert, (const unsigned char *) mbedtls_test_cas_pem,
       mbedtls_test_cas_pem_len );
   if(ret != 0)
   {
@@ -95,9 +95,9 @@ io_ssl_mbedtls_init_server(io_ssl_t* s)
 
   mbedtls_ssl_conf_rng(&s->conf, mbedtls_ctr_drbg_random, &s->ctr_drbg);
   mbedtls_ssl_conf_dbg(&s->conf, my_debug, stdout);   // FIXME
-  mbedtls_ssl_conf_ca_chain(&s->conf, s->srvcert.next, NULL);
+  mbedtls_ssl_conf_ca_chain(&s->conf, s->cacert.next, NULL);
 
-  ret = mbedtls_ssl_conf_own_cert(&s->conf, &s->srvcert, &s->pkey);
+  ret = mbedtls_ssl_conf_own_cert(&s->conf, &s->cacert, &s->pkey);
   if(ret != 0)
   {
     LOGE(TAG, "failed!  mbedtls_ssl_conf_own_cert returned %d\n", ret);
@@ -117,6 +117,62 @@ io_ssl_mbedtls_init_server(io_ssl_t* s)
 }
 
 static int
+io_ssl_mbedtls_init_client(io_ssl_t* s)
+{
+  int ret;
+
+  mbedtls_net_init(&s->mbed_fd);
+  mbedtls_ssl_init(&s->ssl);
+  mbedtls_ssl_config_init(&s->conf);
+  mbedtls_entropy_init(&s->entropy);
+  mbedtls_pk_init(&s->pkey);
+  mbedtls_x509_crt_init(&s->cacert);
+  mbedtls_ctr_drbg_init(&s->ctr_drbg);
+
+  ret = mbedtls_ctr_drbg_seed(&s->ctr_drbg, mbedtls_entropy_func, &s->entropy,
+      (const uint8_t*)pers, strlen(pers));
+  if(ret != 0)
+  {
+    LOGE(TAG, "failed! mbedtls_ctr_drbg_seed %d\n", ret);
+    return -1;
+  }
+
+  ret = mbedtls_x509_crt_parse(&s->cacert, (const unsigned char *) mbedtls_test_cas_pem,
+      mbedtls_test_cas_pem_len );
+  if(ret != 0)
+  {
+    LOGE(TAG, "failed! mbedtls_x509_crt_parse returned %d\n", ret);
+    return -1;
+  }
+
+  ret = mbedtls_ssl_config_defaults(&s->conf,
+      MBEDTLS_SSL_IS_CLIENT,
+      MBEDTLS_SSL_TRANSPORT_STREAM,
+      MBEDTLS_SSL_PRESET_DEFAULT);
+  if(ret != 0)
+  {
+    LOGE(TAG, "failed! mbedtls_ssl_config_defaults %d\n", ret);
+    return -1;
+  }
+
+  mbedtls_ssl_conf_authmode(&s->conf, MBEDTLS_SSL_VERIFY_NONE);
+  mbedtls_ssl_conf_ca_chain(&s->conf, &s->cacert, NULL );
+  mbedtls_ssl_conf_rng(&s->conf, mbedtls_ctr_drbg_random, &s->ctr_drbg );
+
+  ret = mbedtls_ssl_setup(&s->ssl, &s->conf);
+  if(ret != 0)
+  {
+    LOGE(TAG, "mbedtls_ssl_setup failed %d\n", ret);
+    return -1;
+  }
+
+  mbedtls_ssl_set_bio(&s->ssl, &s->mbed_fd, mbedtls_net_send, mbedtls_net_recv, NULL);
+
+  s->handshaking = FALSE;
+  return 0;
+}
+
+static int
 io_ssl_mbedtls_init_accepted(io_ssl_t* l, io_ssl_t* s)
 {
   int ret;
@@ -126,7 +182,7 @@ io_ssl_mbedtls_init_accepted(io_ssl_t* l, io_ssl_t* s)
   mbedtls_ssl_config_init(&s->conf);
   mbedtls_entropy_init(&s->entropy);
   mbedtls_pk_init(&s->pkey);
-  mbedtls_x509_crt_init(&s->srvcert);
+  mbedtls_x509_crt_init(&s->cacert);
   mbedtls_ctr_drbg_init(&s->ctr_drbg);
 
   s->mbed_fd.fd = s->sd;
@@ -150,6 +206,18 @@ io_ssl_mbedtls_init_accepted(io_ssl_t* l, io_ssl_t* s)
 
   s->handshaking = FALSE;
   return 0;
+}
+
+static void
+io_ssl_mbedtls_deinit(io_ssl_t* s)
+{
+  mbedtls_net_free(&s->mbed_fd);
+  mbedtls_x509_crt_free(&s->cacert);
+  mbedtls_pk_free(&s->pkey);
+  mbedtls_ssl_free(&s->ssl);
+  mbedtls_ssl_config_free(&s->conf);
+  mbedtls_ctr_drbg_free(&s->ctr_drbg);
+  mbedtls_entropy_free(&s->entropy);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -314,6 +382,47 @@ io_ssl_accept_callback(io_driver_watcher_t* w, io_driver_event e)
   n->cb(n, &ev);
 }
 
+static void
+io_ssl_connect_callback(io_driver_watcher_t* w, io_driver_event e)
+{
+  io_ssl_t*               n = container_of(w, io_ssl_t, watcher);
+  int                     err;
+  socklen_t               len = sizeof(err);
+  io_ssl_event_t          ev;
+
+  if(e != IO_DRIVER_EVENT_TX)
+  {
+    LOGE(TAG, "%s spurious event %d\n", __func__, e);
+    return;
+  }
+
+  getsockopt(n->sd, SOL_SOCKET, SO_ERROR, &err, &len);
+
+  if(err != 0)
+  {
+    // connect failed
+    ev.ev = io_net_event_enum_closed;
+  }
+  else
+  {
+    // connect success
+    io_driver_watcher_set_cb(&n->watcher, io_ssl_generic_callback);
+
+    ev.ev = io_net_event_enum_connected;
+    io_driver_no_watch(n->driver, &n->watcher, IO_DRIVER_EVENT_TX);
+    io_driver_watch(n->driver, &n->watcher, IO_DRIVER_EVENT_RX);
+  }
+
+  n->handshaking = TRUE;
+  io_driver_watcher_set_cb(&n->watcher, io_ssl_handshake_callback);
+
+  ev.n    = n;
+  n->cb(n, &ev);
+
+  // initiate handshake
+  io_ssl_handshake_callback(w, 0);
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 //
 // public interfaces
@@ -367,8 +476,54 @@ bind_failed:
   close(sd);
 
 socket_failed:
-  // FIXME mbedtls deinit???
+  io_ssl_mbedtls_deinit(s);
+  return -1;
+}
 
+int
+io_ssl_connect(io_driver_t* driver, io_ssl_t* s, const char* ip_addr, int port, io_ssl_callback cb)
+{
+  int                 sd;
+  struct sockaddr_in  to;
+
+  if(io_ssl_mbedtls_init_client(s) != 0)
+  {
+    return -1;
+  }
+
+  sd = socket(AF_INET, SOCK_STREAM, 0);
+  if(sd < 0)
+  {
+    LOGE(TAG, "%s socket failed\n", __func__);
+    goto socket_failed;
+  }
+
+  sock_util_put_nonblock(sd);
+
+  memset(&to, 0, sizeof(to));
+  to.sin_family       = AF_INET;
+  to.sin_addr.s_addr  = inet_addr(ip_addr);
+  to.sin_port         = htons(port);
+
+  s->sd       = sd;
+  s->cb       = cb;
+  s->driver   = driver;
+
+  io_driver_watcher_init(&s->watcher, sd, io_ssl_connect_callback);
+  io_driver_watch(driver, &s->watcher, IO_DRIVER_EVENT_TX);
+
+  s->mbed_fd.fd = s->sd;
+
+  //
+  // don't care about return value here
+  // anyway any error will be detected at the next loop
+  //
+  connect(sd, (struct sockaddr*)&to, sizeof(to));
+
+  return 0;
+
+socket_failed:
+  io_ssl_mbedtls_deinit(s);
   return -1;
 }
 
@@ -399,14 +554,7 @@ io_ssl_tx(io_ssl_t* s, uint8_t* buf, int len)
 void
 io_ssl_close(io_ssl_t* s)
 {
-  mbedtls_net_free(&s->mbed_fd);
-  mbedtls_x509_crt_free(&s->srvcert);
-  mbedtls_pk_free(&s->pkey);
-  mbedtls_ssl_free(&s->ssl);
-  mbedtls_ssl_config_free(&s->conf);
-  mbedtls_ctr_drbg_free(&s->ctr_drbg);
-  mbedtls_entropy_free(&s->entropy);
-
+  io_ssl_mbedtls_deinit(s);
   io_driver_no_watch(s->driver,
       &s->watcher,
       IO_DRIVER_EVENT_RX | IO_DRIVER_EVENT_TX | IO_DRIVER_EVENT_EX);
