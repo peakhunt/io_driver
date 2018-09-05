@@ -5,7 +5,6 @@
 #include <arpa/inet.h>
 
 #include "io_driver.h"
-#include "circ_buffer.h"
 
 typedef enum
 {
@@ -56,7 +55,6 @@ struct __io_net_t
   ////////////////////////////////////////////
   uint8_t*              rx_buf;
   int                   rx_size;
-  circ_buffer_t*        tx_buf;
 };
 
 extern int io_net_bind(io_driver_t* driver, io_net_t* n, int port, io_net_callback cb);
@@ -70,12 +68,6 @@ io_net_set_rx_buf(io_net_t* n, uint8_t* rx_buf, int rx_size)
 {
   n->rx_buf   = rx_buf;
   n->rx_size  = rx_size;
-}
-
-static inline void
-io_net_set_tx_circ_buf(io_net_t* n, circ_buffer_t* cb)
-{
-  n->tx_buf = cb;
 }
 
 #endif /* !__IO_NET_DEF_H__ */

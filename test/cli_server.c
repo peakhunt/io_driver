@@ -10,11 +10,14 @@
 
 #include "cli.h"
 
+#include "circ_buffer.h"
+
 typedef struct
 {
   struct list_head    le;
   io_telnet_t         tconn;
   cli_intf_t          cli_if;
+  circ_buffer_t       txcb;
 } cli_conn_t;
 
 static io_net_return_t telnet_server_callback(io_telnet_t* t, io_telnet_event_t* e);
@@ -45,11 +48,78 @@ init_telnet_session(cli_conn_t* c)
 }
 
 static void
+cli_tx_resume(cli_conn_t* c)
+{
+  uint8_t   buffer[128];
+  int       data_size,
+            ret,
+            len;
+
+  LOGI(TAG, "cli_tx_resume\n");
+
+  while(1)
+  {
+    if(circ_buffer_is_empty(&c->txcb))
+    {
+      return;
+    }
+
+    data_size = circ_buffer_get_data_size(&c->txcb);
+    len = data_size < 128 ? data_size : 128;
+    circ_buffer_peek(&c->txcb, buffer, len);
+
+    ret = io_telnet_tx(&c->tconn, buffer, len);
+    if(ret == 0)
+    {
+      LOGE(TAG, "0 in cli_tx_resume\n");
+      return;
+    }
+    else if(ret == -1)
+    {
+      LOGE(TAG, "ERROR -1 in cli_tx_resume\n");
+      return;
+    }
+    circ_buffer_advance(&c->txcb, ret);
+  }
+}
+
+static void
 cli_tx(cli_intf_t* intf, const char* buf, int len)
 {
   cli_conn_t*   c = container_of(intf, cli_conn_t, cli_if);
+  int           ret,
+                nwritten = 0;
 
-  io_telnet_tx(&c->tconn, (uint8_t*)buf, len);
+  if(circ_buffer_is_empty(&c->txcb) == FALSE)
+  {
+    if(circ_buffer_put(&c->txcb, (uint8_t*)buf, len) != 0)
+    {
+      LOGE(TAG, "cli_tx. 1-circ_buffer_put failed\n");
+      return;
+    }
+  }
+
+  while(nwritten < len)
+  {
+    ret = io_telnet_tx(&c->tconn, (uint8_t*)buf, len);
+    if(ret == 0)
+    {
+      ret = circ_buffer_put(&c->txcb, (uint8_t*)&buf[nwritten], len - nwritten);
+      if(ret != 0)
+      {
+        LOGE(TAG, "cli_tx circ_buffer_put error\n");
+        return;
+      }
+      LOGE(TAG, "cli_tx paused\n");
+      return;
+    }
+    else if(ret == -1)
+    {
+      LOGE(TAG, "cli_tx error\n");
+      return;
+    }
+    nwritten += ret;
+  }
 }
 
 static void
@@ -76,6 +146,8 @@ alloc_cli_connection(void)
 
   cli_intf_register(&c->cli_if);
 
+  circ_buffer_init(&c->txcb, 512);
+
   LOGI(TAG, "new connection :\n");
   return c;
 }
@@ -86,6 +158,7 @@ dealloc_cli_connection(cli_conn_t* c)
   io_telnet_close(&c->tconn);
 
   list_del(&c->le);
+  circ_buffer_deinit(&c->txcb);
   cli_intf_unregister(&c->cli_if);
   free(c);
 }
@@ -122,6 +195,11 @@ telnet_server_callback(io_telnet_t* t, io_telnet_event_t* e)
         return io_net_return_stop;
       }
     }
+    return io_net_return_continue;
+
+  case io_net_event_enum_tx:
+    c = container_of(t, cli_conn_t, tconn); 
+    cli_tx_resume(c);
     return io_net_return_continue;
 
   case io_net_event_enum_closed:

@@ -33,8 +33,6 @@ struct __io_telnet_t
   io_net_t            n;
   telnet_reader_t     treader;
   uint8_t             rx_buf[IO_TELNET_RX_BUF_SIZE];
-  uint8_t             tx_buf[IO_TELNET_TX_BUF_SIZE];
-  circ_buffer_t       txcb;
 };
 
 

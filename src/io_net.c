@@ -50,50 +50,6 @@ io_net_handle_data_rx_event(io_net_t* n)
   return n->cb(n, &ev);
 }
 
-static void
-io_net_handle_data_tx_event(io_net_t* n)
-{
-  uint8_t   buffer[128];
-  int       data_size,
-            ret,
-            len;
-
-  if(circ_buffer_is_empty(n->tx_buf))
-  {
-    LOGI(TAG, "disabling TX event. circ buffer empty now");
-    io_driver_no_watch(n->driver, &n->watcher, IO_DRIVER_EVENT_TX);
-    return;
-  }
-
-  // XXX
-  // looping would be more efficient but
-  // on the other hand, this has better time sharing feature
-  //
-  data_size = circ_buffer_get_data_size(n->tx_buf);
-  len = data_size < 128 ? data_size : 128;
-  circ_buffer_peek(n->tx_buf, buffer, len);
-
-  ret = write(n->sd, buffer, len);
-  if(ret <= 0)
-  {
-    // definitely stream got into a trouble
-    io_driver_no_watch(n->driver, &n->watcher, IO_DRIVER_EVENT_TX);
-
-    LOGI(TAG, "XXXXXXXX this should not happen");
-    CRASH();
-    return;
-  }
-
-  circ_buffer_advance(n->tx_buf, ret);
-
-  if(circ_buffer_is_empty(n->tx_buf))
-  {
-    io_driver_no_watch(n->driver, &n->watcher, IO_DRIVER_EVENT_TX);
-  }
-
-  return;
-}
-
 ///////////////////////////////////////////////////////////////////////////////
 //
 // I/O driver callbacks
@@ -115,17 +71,12 @@ io_net_generic_callback(io_driver_watcher_t* w, io_driver_event e)
 
   if((e & IO_DRIVER_EVENT_TX))
   {
-    if(n->tx_buf)
-    {
-      io_net_handle_data_tx_event(n);
-    }
-    else
-    {
-      io_net_event_t    ev;
+    io_net_event_t    ev;
 
-      ev.ev = io_net_event_enum_tx;
-      n->cb(n, &ev);
-    }
+    io_driver_no_watch(n->driver, &n->watcher, IO_DRIVER_EVENT_TX);
+
+    ev.ev = io_net_event_enum_tx;
+    n->cb(n, &ev);
   }
 }
 
@@ -350,75 +301,28 @@ io_net_close(io_net_t* n)
   close(n->sd);
 }
 
+//
+// @return
+//    > 0, if some bytes are written
+//      0, if tx event is scheduled
+//     -1, if error
+//
 int
 io_net_tx(io_net_t* n, uint8_t* buf, int len)
 {
   int ret;
 
-  if(n->tx_buf == NULL)
+  ret = write(n->sd, buf, len);
+  if(ret <= 0)
   {
-#if 0
-    int nwritten = 0;
-
-    while(nwritten < len)
+    if(!(errno == EWOULDBLOCK || errno == EAGAIN))
     {
-      ret = write(n->sd, &buf[nwritten], len - nwritten);
-      if(ret <= 0)
-      {
-        if(!(errno == EWOULDBLOCK || errno == EAGAIN))
-        {
-          return -1;
-        }
-      }
-      else
-      {
-        nwritten += ret;
-      }
+      return -1;
     }
-    return nwritten;
-#else
-    return write(n->sd, buf, len);
-#endif
+    io_driver_watch(n->driver, &n->watcher, IO_DRIVER_EVENT_TX);
+    return 0;
   }
-
-  // use tx buffer mode
-
-  if(circ_buffer_is_empty(n->tx_buf) == FALSE)
-  {
-    // circular buffer is not empty. to maintain message order
-    // can't send on the socket.
-    return circ_buffer_put(n->tx_buf, buf, len) == 0 ? len : -1;
-  }
-  else
-  {
-    // nothing is tx buffer
-    // try to send
-    ret = write(n->sd, buf, len);
-    if(ret == len)
-    {
-      return len;
-    }
-
-    if(ret < 0)
-    {
-      if(!(errno == EWOULDBLOCK || errno == EAGAIN))
-      {
-        return -1;
-      }
-    }
-  }
-
-  //
-  // message partially sent. put the rest in circular buffer
-  //
-  if(circ_buffer_put(n->tx_buf, &buf[ret], len - ret) == FALSE)
-  {
-    return -1;
-  }
-  
-  io_driver_watch(n->driver, &n->watcher, IO_DRIVER_EVENT_TX);
-
-  return len;
+  return ret;
 }
 
 int

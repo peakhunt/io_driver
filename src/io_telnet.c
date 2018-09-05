@@ -23,9 +23,7 @@ static const char* TAG = "telnet";
 static void
 io_telnet_connection_init(io_telnet_t* t)
 {
-  circ_buffer_init_with_mem(&t->txcb, t->tx_buf, IO_TELNET_TX_BUF_SIZE);
   io_net_set_rx_buf(&t->n, t->rx_buf, IO_TELNET_RX_BUF_SIZE);
-  io_net_set_tx_circ_buf(&t->n, &t->txcb);
 
   t->treader.databack = io_telnet_data_back;
   t->treader.cmdback  = io_telnet_cmd_back;
@@ -112,9 +110,9 @@ io_telnet_server_callback(io_net_t* n, io_net_event_t* e)
     return io_net_return_continue;
 
   case io_net_event_enum_tx:
-    LOGE(TAG, "BUG!!!! Unexpected Event\n");
-    CRASH();
-    break;
+    ev.ev = io_net_event_enum_tx;
+    ev.n  = NULL;
+    return t->cb(t, &ev);
 
   case io_net_event_enum_closed:
     ev.ev = io_net_event_enum_closed;
@@ -147,6 +145,11 @@ io_telnet_client_callback(io_net_t* n, io_net_event_t* e)
       }
     }
     return io_net_return_continue;
+
+  case io_net_event_enum_tx:
+    ev.ev = io_net_event_enum_tx;
+    ev.n  = NULL;
+    return t->cb(t, &ev);
 
   case io_net_event_enum_closed:
     ev.ev = io_net_event_enum_closed;
