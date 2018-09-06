@@ -14,3 +14,8 @@ openssl req -new -key server.pem -out server.csr
 # generate self signed cert
 #
 openssl x509 -req -days 365 -in server.csr -signkey server.pem -out server.crt
+
+#
+# validate cert just for a test
+#
+openssl x509 -in server.crt -text -noout
