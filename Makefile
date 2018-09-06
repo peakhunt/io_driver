@@ -7,7 +7,6 @@ LIB_IO_DRIVER_SOURCES = \
 src/io_driver.c \
 src/io_net.c \
 src/io_telnet.c \
-src/io_ssl.c \
 src/io_timer.c \
 src/soft_timer.c \
 src/telnet_reader.c \
@@ -104,7 +103,7 @@ vpath %.c $(sort $(dir $(CLI_SERVER_SRC)))
 
 $(BUILD_DIR)/cli_server: $(BUILD_DIR)/$(TARGET) $(CLI_SERVER_OBJS)
 	@echo "[LD]         $@"
-	$Q$(CC) $(CLI_SERVER_OBJS) $(LDFLAGS) -o $@ -liodriver
+	$Q$(CC) $(CLI_SERVER_OBJS) $(LDFLAGS) -o $@ -liodriver -lmbedtls -lmbedx509 -lmbedcrypto
 
 CLI_CLIENT_SRC= \
 test/cli_client.c
@@ -113,7 +112,7 @@ vpath %.c $(sort $(dir $(CLI_CLIENT_SRC)))
 
 $(BUILD_DIR)/cli_client: $(BUILD_DIR)/$(TARGET) $(CLI_CLIENT_OBJS)
 	@echo "[LD]         $@"
-	$Q$(CC) $(CLI_CLIENT_OBJS) $(LDFLAGS) -o $@ -liodriver
+	$Q$(CC) $(CLI_CLIENT_OBJS) $(LDFLAGS) -o $@ -liodriver -lmbedtls -lmbedx509 -lmbedcrypto
 
 SSL_SERVER_SRC= \
 test/ssl_server.c

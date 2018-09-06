@@ -2,7 +2,7 @@
 #include <stdlib.h>
 
 #include "io_driver.h"
-#include "io_ssl.h"
+#include "io_net.h"
 #include "circ_buffer.h"
 
 #define HTTP_RESPONSE \
@@ -14,19 +14,22 @@
 typedef struct
 {
   struct list_head    le;
+  io_net_t            n;
   io_ssl_t            sconn;
   uint8_t             rx_buf[128];
   circ_buffer_t       txcb;
 } ssl_conn_t;
 
-static io_net_return_t ssl_server_callback(io_ssl_t* t, io_ssl_event_t* e);
+static io_net_return_t ssl_server_callback(io_net_t* t, io_net_event_t* e);
 static ssl_conn_t* alloc_ssl_connection(void);
 static void dealloc_ssl_connection(ssl_conn_t* c);
 
 static const char* TAG = "main";
 static io_driver_t        io_driver;
 static struct list_head   conns;
-static io_ssl_t        sserver;
+
+static io_net_t           nserver;
+static io_ssl_t           sserver;
 
 static ssl_conn_t* 
 alloc_ssl_connection(void)
@@ -47,7 +50,7 @@ alloc_ssl_connection(void)
 static void
 dealloc_ssl_connection(ssl_conn_t* c)
 {
-  io_ssl_close(&c->sconn);
+  io_net_close(&c->n);
   circ_buffer_deinit(&c->txcb);
   list_del(&c->le);
   free(c);
@@ -74,7 +77,7 @@ ssl_tx_resume(ssl_conn_t* c)
     len = data_size < 128 ? data_size : 128;
     circ_buffer_peek(&c->txcb, buffer, len);
 
-    ret = io_ssl_tx(&c->sconn, buffer, len);
+    ret = io_net_tx(&c->n, buffer, len);
     if(ret == 0)
     {
       LOGE(TAG, "0 in cli_tx_resume\n");
@@ -106,7 +109,7 @@ ssl_tx(ssl_conn_t* c, uint8_t* buf, int len)
 
   while(nwritten < len)
   {
-    ret = io_ssl_tx(&c->sconn, (uint8_t*)buf, len);
+    ret = io_net_tx(&c->n, (uint8_t*)buf, len);
     if(ret == 0)
     {
       ret = circ_buffer_put(&c->txcb, (uint8_t*)&buf[nwritten], len - nwritten);
@@ -128,7 +131,7 @@ ssl_tx(ssl_conn_t* c, uint8_t* buf, int len)
 }
 
 static io_net_return_t
-ssl_server_callback(io_ssl_t* s, io_ssl_event_t* e)
+ssl_server_callback(io_net_t* n, io_net_event_t* e)
 {
   ssl_conn_t* c;
 
@@ -141,31 +144,32 @@ ssl_server_callback(io_ssl_t* s, io_ssl_event_t* e)
     {
       return io_net_return_stop;
     }
-    e->n = &c->sconn;
+    e->c.n = &c->n;
+    e->c.s = &c->sconn;
     return io_net_return_continue;
 
   case io_net_event_enum_connected:
     LOGI(TAG, "new ssl connected\n");
-    c = container_of(s, ssl_conn_t, sconn); 
-    io_ssl_set_rx_buf(s, c->rx_buf, 128);
+    c = container_of(n, ssl_conn_t, n); 
+    io_net_set_rx_buf(n, c->rx_buf, 128);
     return io_net_return_continue;
 
   case io_net_event_enum_rx:
     LOGI(TAG, "RX: %d bytes\n", e->r.len);
-    c = container_of(s, ssl_conn_t, sconn); 
+    c = container_of(n, ssl_conn_t, n); 
     ssl_tx(c, (uint8_t*)HTTP_RESPONSE, strlen(HTTP_RESPONSE));
     //dealloc_ssl_connection(c);
     //return io_net_return_stop;
     return io_net_return_continue;
 
   case io_net_event_enum_closed:
-    c = container_of(s, ssl_conn_t, sconn); 
+    c = container_of(n, ssl_conn_t, n); 
     LOGI(TAG, "Close event :\n");
     dealloc_ssl_connection(c);
     return io_net_return_stop;
 
   case io_net_event_enum_tx:
-    c = container_of(s, ssl_conn_t, sconn); 
+    c = container_of(n, ssl_conn_t, n); 
     LOGI(TAG, "TX event :\n");
     ssl_tx_resume(c);
     break;
@@ -184,7 +188,8 @@ main()
   INIT_LIST_HEAD(&conns);
 
   io_driver_init(&io_driver);
-  io_ssl_bind(&io_driver, &sserver, 11070, ssl_server_callback);
+
+  io_net_bind(&io_driver, &nserver, &sserver, 11070, ssl_server_callback);
 
   while(1)
   {

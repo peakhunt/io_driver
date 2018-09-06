@@ -3,11 +3,12 @@
 
 #include "io_driver.h"
 #include "io_net.h"
-#include "io_ssl.h"
 #include "io_timer.h"
 
 static const char* TAG = "main";
 static io_driver_t        io_driver;
+
+static io_net_t           nclient;
 static io_ssl_t           sclient;
 
 static io_timer_t         io_timer;
@@ -15,7 +16,7 @@ static io_timer_t         io_timer;
 static char*              ipaddr;
 static int                port;
 
-static io_net_return_t ssl_client_callback(io_ssl_t* n, io_ssl_event_t* e);
+static io_net_return_t ssl_client_callback(io_net_t* n, io_net_event_t* e);
 
 static SoftTimerElem      reconn_tmr;
 static SoftTimerElem      conn_tmr;
@@ -25,7 +26,7 @@ static void
 start_connect(void)
 {
   LOGI(TAG, "starting connect %s:%d\n", ipaddr, port);
-  if(io_ssl_connect(&io_driver, &sclient, ipaddr, port, ssl_client_callback) != 0)
+  if(io_net_connect(&io_driver, &nclient, &sclient, ipaddr, port, ssl_client_callback) != 0)
   {
     LOGE(TAG, "io_telnet_connect returned NULL....\n");
     return;
@@ -47,7 +48,7 @@ connect_timeout(SoftTimerElem* te)
 {
   LOGI(TAG, "connect_timeout\n");
   LOGI(TAG, "AAAAAAAAA\n");
-  io_ssl_close(&sclient);
+  io_net_close(&nclient);
   start_connect();
 }
 
@@ -56,12 +57,12 @@ close_timeout(SoftTimerElem* te)
 {
   LOGI(TAG, "close_timeout\n");
   LOGI(TAG, "BBBBBBBBBBBBBB\n");
-  io_ssl_close(&sclient);
+  io_net_close(&nclient);
   start_connect();
 }
 
 static io_net_return_t
-ssl_client_callback(io_ssl_t* n, io_ssl_event_t* e)
+ssl_client_callback(io_net_t* n, io_net_event_t* e)
 {
   switch(e->ev)
   {
@@ -83,7 +84,7 @@ ssl_client_callback(io_ssl_t* n, io_ssl_event_t* e)
 
   case io_net_event_enum_closed:
     LOGI(TAG, "XXXX Disconnected\n");
-    io_ssl_close(&sclient);
+    io_net_close(&nclient);
     io_timer_stop(&io_timer, &conn_tmr);
     io_timer_stop(&io_timer, &close_tmr);
     LOGI(TAG, "Starting Reconnect Timer: 1000\n");

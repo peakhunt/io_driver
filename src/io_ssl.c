@@ -1,3 +1,10 @@
+//
+// XXX
+//
+// DO NOT USE THIS.
+// ALL THE TLS CODES ARE INTEGRATED INTO io_net NOW.
+// THIS IS PURELY KEPT FOR REFERENCE PURPOSE.
+//
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>

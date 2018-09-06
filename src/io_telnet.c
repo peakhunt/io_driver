@@ -86,7 +86,7 @@ io_telnet_server_callback(io_net_t* n, io_net_event_t* e)
 
     nt      = ev.n;
     nt->cb  = t->cb;
-    e->n    = &nt->n;
+    e->c.n    = &nt->n;
     return io_net_return_continue;
 
   case io_net_event_enum_connected:
@@ -174,7 +174,7 @@ io_telnet_client_callback(io_net_t* n, io_net_event_t* e)
 int
 io_telnet_bind(io_driver_t* driver, io_telnet_t* t, int port, io_telnet_callback cb)
 {
-  if(io_net_bind(driver, &t->n, port, io_telnet_server_callback) != 0)
+  if(io_net_bind(driver, &t->n, NULL, port, io_telnet_server_callback) != 0)
   {
     return -1;
   }
@@ -187,7 +187,7 @@ io_telnet_bind(io_driver_t* driver, io_telnet_t* t, int port, io_telnet_callback
 int
 io_telnet_connect(io_driver_t* driver, io_telnet_t* t, const char* ip_addr, int port, io_telnet_callback cb)
 {
-  if(io_net_connect(driver, &t->n, ip_addr, port, io_telnet_client_callback) != 0)
+  if(io_net_connect(driver, &t->n, NULL, ip_addr, port, io_telnet_client_callback) != 0)
   {
     return -1;
   }
