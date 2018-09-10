@@ -6,8 +6,7 @@
 static const char* TAG = "main";
 static io_dns_cfg_t   _cfg = 
 {
-  //"8.8.8.8",
-  "127.0.0.53",
+  "8.8.8.8",
   53,
   10,
 };
