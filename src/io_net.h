@@ -115,6 +115,9 @@ extern void io_net_close(io_net_t* n);
 
 extern int io_net_tx(io_net_t* n, uint8_t* buf, int len);
 
+extern int io_net_udp(io_driver_t* driver, io_net_t* n, int port, io_net_callback cb);
+extern int io_net_udp_tx(io_net_t* n, struct sockaddr_in* to, uint8_t* buf, int len);
+
 static inline void
 io_net_set_rx_buf(io_net_t* n, uint8_t* rx_buf, int rx_size)
 {

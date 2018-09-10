@@ -7,6 +7,7 @@ LIB_IO_DRIVER_SOURCES = \
 src/io_driver.c \
 src/io_net.c \
 src/io_telnet.c \
+src/io_dns.c \
 src/io_timer.c \
 src/soft_timer.c \
 src/telnet_reader.c \
@@ -90,7 +91,8 @@ TEST_TARGETS= \
 $(BUILD_DIR)/cli_server  \
 $(BUILD_DIR)/cli_client  \
 $(BUILD_DIR)/ssl_server  \
-$(BUILD_DIR)/ssl_client
+$(BUILD_DIR)/ssl_client  \
+$(BUILD_DIR)/dns_client
 
 .PHONY: tests
 tests: $(TEST_TARGETS)
@@ -131,6 +133,15 @@ vpath %.c $(sort $(dir $(SSL_CLIENT_SRC)))
 $(BUILD_DIR)/ssl_client: $(BUILD_DIR)/$(TARGET) $(SSL_CLIENT_OBJS)
 	@echo "[LD]         $@"
 	$Q$(CC) $(SSL_CLIENT_OBJS) $(LDFLAGS) -o $@ -liodriver -lmbedtls -lmbedx509 -lmbedcrypto
+
+DNS_CLIENT_SRC= \
+test/dns_client.c
+DNS_CLIENT_OBJS = $(addprefix $(BUILD_DIR)/,$(notdir $(DNS_CLIENT_SRC:.c=.o)))
+vpath %.c $(sort $(dir $(DNS_CLIENT_SRC)))
+
+$(BUILD_DIR)/dns_client: $(BUILD_DIR)/$(TARGET) $(DNS_CLIENT_OBJS)
+	@echo "[LD]         $@"
+	$Q$(CC) $(DNS_CLIENT_OBJS) $(LDFLAGS) -o $@ -liodriver -lmbedtls -lmbedx509 -lmbedcrypto
 
 
 #######################################
