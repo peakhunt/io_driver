@@ -3,6 +3,8 @@
 
 #include "io_dns.h"
 
+static void dns_callback(io_dns_t* d, io_dns_event_t* e);
+
 static const char* TAG = "main";
 static io_dns_cfg_t   _cfg = 
 {
@@ -14,10 +16,13 @@ static io_dns_cfg_t   _cfg =
 static io_driver_t        io_driver;
 static io_timer_t         io_timer;
 static io_dns_t           io_dns;
+static int                count = 0;
+static char*              target;
 
 static void 
 dns_callback(io_dns_t* d, io_dns_event_t* e)
 {
+  LOGI(TAG, "============== %d ========\n", count);
   LOGI(TAG, "dns_callback\n");
 
   switch(e->evt_type)
@@ -33,18 +38,23 @@ dns_callback(io_dns_t* d, io_dns_event_t* e)
           e->addrs->addrs[i][2],
           e->addrs->addrs[i][3]);
     }
-    exit(0);
     break;
   case io_dns_event_error:
     LOGI(TAG, "error\n");
-    exit(-1);
     break;
 
   case io_dns_event_timedout:
     LOGI(TAG, "timeout\n");
-    exit(-1);
     break;
   }
+
+  count++;
+  if(count >= 5)
+  {
+    exit(0);
+  }
+
+  io_dns_lookup_ipv4(&io_driver, &io_timer, &io_dns, &_cfg, target, dns_callback);
 }
 
 int
@@ -58,12 +68,14 @@ main(int argc, char** argv)
     return -1;
   }
 
+  target = argv[1];
+
   io_driver_init(&io_driver);
   io_timer_init(&io_driver, &io_timer, 100);
 
   LOGI(TAG, "looking up %s\n", argv[1]);
 
-  io_dns_lookup_ipv4(&io_driver, &io_timer, &io_dns, &_cfg, argv[1], dns_callback);
+  io_dns_lookup_ipv4(&io_driver, &io_timer, &io_dns, &_cfg, target, dns_callback);
 
   while(1)
   {
