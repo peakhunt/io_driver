@@ -8,6 +8,7 @@ src/io_driver.c \
 src/io_net.c \
 src/io_telnet.c \
 src/io_dns.c \
+src/dns_util.c \
 src/io_timer.c \
 src/soft_timer.c \
 src/telnet_reader.c \
