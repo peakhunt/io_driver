@@ -3,6 +3,7 @@
 
 #include "io_net.h"
 #include "io_timer.h"
+#include "dns_util.h"
 
 #define IO_DNS_RX_BUF_SIZE                256
 #define IO_DNS_MAX_HOST_ADDRESSES         4
@@ -19,16 +20,10 @@ typedef enum
 
 typedef struct
 {
-  uint8_t     n_addrs;
-  in_addr_t   addrs[IO_DNS_MAX_HOST_ADDRESSES];
-} io_dns_host_addrs_t;
-
-typedef struct
-{
   io_dns_event_enum_t   evt_type;
   union
   {
-    io_dns_host_addrs_t*  addrs;
+    dns_util_host_addrs_t*  addrs;
   };
 } io_dns_event_t;
 
@@ -50,6 +45,7 @@ struct __io_dns_t
   uint8_t           rx_buf[IO_DNS_RX_BUF_SIZE];
 
   int               qlen;
+  dns_util_t        du;
 };
 
 extern int io_dns_lookup_ipv4(io_driver_t* driver, io_timer_t* t, io_dns_t* d, const io_dns_cfg_t* cfg,
