@@ -1,6 +1,15 @@
 #include "io_dns.h"
 
 static const char* TAG = "dns";
+///////////////////////////////////////////////////////////////////////////////
+//
+// XXX
+// Currently there is no buffer length or message length check.
+// I'm just too lazy to do that for now. Also the work is not interesting
+// enough to invest my time on it.
+// So use it with your own caution!
+//
+///////////////////////////////////////////////////////////////////////////////
 
 ///////////////////////////////////////////////////////////////////////////////
 //
@@ -133,7 +142,7 @@ build_qname(uint8_t* buf, const char* host)
 }
 
 static inline int
-io_dns_build_A_query(uint8_t* buf, const char* host, int qtype)
+dns_build_A_query(uint8_t* buf, const char* host, int qtype)
 {
   uint8_t*              qname;
   struct dns_question*  qinfo;
@@ -177,7 +186,7 @@ parse_qname(uint8_t* buf)
 }
 
 static inline int
-io_dns_parse_A_response(io_dns_t* d, uint8_t* buf, int len, io_dns_host_addrs_t* addrs)
+dns_parse_A_response(io_dns_t* d, uint8_t* buf, int len, io_dns_host_addrs_t* addrs)
 {
   struct dns_header*    h;
   int                   ans_count;
@@ -198,7 +207,6 @@ io_dns_parse_A_response(io_dns_t* d, uint8_t* buf, int len, io_dns_host_addrs_t*
   addrs->n_addrs = 0;
 
   b += d->qlen;
-  // b += sizeof(struct dns_header);
 
   for(int i = 0; i < ans_count; i++)
   {
@@ -226,10 +234,7 @@ io_dns_parse_A_response(io_dns_t* d, uint8_t* buf, int len, io_dns_host_addrs_t*
       }
       else
       {
-        addrs->addrs[addrs->n_addrs][0] = b[0];
-        addrs->addrs[addrs->n_addrs][1] = b[1];
-        addrs->addrs[addrs->n_addrs][2] = b[2];
-        addrs->addrs[addrs->n_addrs++][3] = b[3];
+        addrs->addrs[addrs->n_addrs++] = *((uint32_t*)b);
       }
     }
     else
@@ -256,7 +261,7 @@ io_dns_rx_callback(io_net_t* n, io_net_event_t* e)
 
   memset(&ev, 0, sizeof(ev));
 
-  if(io_dns_parse_A_response(d, e->r.buf, e->r.len, &a) != 0)
+  if(dns_parse_A_response(d, e->r.buf, e->r.len, &a) != 0)
   {
     ev.evt_type = io_dns_event_error;
   }
@@ -313,7 +318,7 @@ io_dns_lookup_ipv4(io_driver_t* driver, io_timer_t* t, io_dns_t* d, const io_dns
 
   io_net_set_rx_buf(&d->n, d->rx_buf, IO_DNS_RX_BUF_SIZE);
 
-  req_len = io_dns_build_A_query(d->rx_buf, target, T_A);
+  req_len = dns_build_A_query(d->rx_buf, target, T_A);
   d->qlen = req_len;
 
   memset(&to, 0, sizeof(to));

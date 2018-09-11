@@ -31,12 +31,12 @@ dns_callback(io_dns_t* d, io_dns_event_t* e)
     LOGI(TAG, "got something\n");
     for(int i = 0; i < e->addrs->n_addrs; i++)
     {
-      LOGI(TAG, "result %d: %d.%d.%d.%d\n",
+      struct in_addr    in;
+
+      in.s_addr = e->addrs->addrs[i];
+      LOGI(TAG, "result %d: %s\n",
           i,
-          e->addrs->addrs[i][0],
-          e->addrs->addrs[i][1],
-          e->addrs->addrs[i][2],
-          e->addrs->addrs[i][3]);
+          inet_ntoa(in));
     }
     break;
   case io_dns_event_error:

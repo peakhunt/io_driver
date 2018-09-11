@@ -20,7 +20,7 @@ typedef enum
 typedef struct
 {
   uint8_t     n_addrs;
-  uint8_t     addrs[IO_DNS_MAX_HOST_ADDRESSES][4];
+  in_addr_t   addrs[IO_DNS_MAX_HOST_ADDRESSES];
 } io_dns_host_addrs_t;
 
 typedef struct
