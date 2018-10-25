@@ -8,6 +8,7 @@ src/io_driver.c \
 src/io_net.c \
 src/io_telnet.c \
 src/io_dns.c \
+src/io_pipe.c \
 src/dns_util.c \
 src/io_timer.c \
 src/soft_timer.c \
@@ -71,79 +72,30 @@ vpath %.c $(sort $(dir $(TARGET_SOURCES)))
 # C source build rule
 #######################################
 $(BUILD_DIR)/%.o: %.c Makefile | $(BUILD_DIR)
+ifeq ($V, 0)
 	@echo "[CC]         $(notdir $<)"
+endif
 	$Q$(CC) -c $(CFLAGS) $< -o $@
 
 #######################################
 # main target
 #######################################
 $(BUILD_DIR)/$(TARGET): $(OBJECTS) Makefile
+ifeq ($V, 0)
 	@echo "[AR]         $@"
+endif
 	$Q$(AR) $(ARFLAGS) $@ $(OBJECTS)
 
 $(BUILD_DIR):
+ifeq ($V, 0)
 	@echo "MKDIR          $(BUILD_DIR)"
+endif
 	$Qmkdir $@
 
 #######################################
 # tests demo
 #######################################
-TEST_TARGETS= \
-$(BUILD_DIR)/cli_server  \
-$(BUILD_DIR)/cli_client  \
-$(BUILD_DIR)/ssl_server  \
-$(BUILD_DIR)/ssl_client  \
-$(BUILD_DIR)/dns_client
-
-.PHONY: tests
-tests: $(TEST_TARGETS)
-
-CLI_SERVER_SRC= \
-test/cli_server.c \
-test/cli.c
-CLI_SERVER_OBJS = $(addprefix $(BUILD_DIR)/,$(notdir $(CLI_SERVER_SRC:.c=.o)))
-vpath %.c $(sort $(dir $(CLI_SERVER_SRC)))
-
-$(BUILD_DIR)/cli_server: $(BUILD_DIR)/$(TARGET) $(CLI_SERVER_OBJS)
-	@echo "[LD]         $@"
-	$Q$(CC) $(CLI_SERVER_OBJS) $(LDFLAGS) -o $@ -liodriver -lmbedtls -lmbedx509 -lmbedcrypto
-
-CLI_CLIENT_SRC= \
-test/cli_client.c
-CLI_CLIENT_OBJS = $(addprefix $(BUILD_DIR)/,$(notdir $(CLI_CLIENT_SRC:.c=.o)))
-vpath %.c $(sort $(dir $(CLI_CLIENT_SRC)))
-
-$(BUILD_DIR)/cli_client: $(BUILD_DIR)/$(TARGET) $(CLI_CLIENT_OBJS)
-	@echo "[LD]         $@"
-	$Q$(CC) $(CLI_CLIENT_OBJS) $(LDFLAGS) -o $@ -liodriver -lmbedtls -lmbedx509 -lmbedcrypto
-
-SSL_SERVER_SRC= \
-test/ssl_server.c
-SSL_SERVER_OBJS = $(addprefix $(BUILD_DIR)/,$(notdir $(SSL_SERVER_SRC:.c=.o)))
-vpath %.c $(sort $(dir $(SSL_SERVER_SRC)))
-
-$(BUILD_DIR)/ssl_server: $(BUILD_DIR)/$(TARGET) $(SSL_SERVER_OBJS)
-	@echo "[LD]         $@"
-	$Q$(CC) $(SSL_SERVER_OBJS) $(LDFLAGS) -o $@ -liodriver -lmbedtls -lmbedx509 -lmbedcrypto
-
-SSL_CLIENT_SRC= \
-test/ssl_client.c
-SSL_CLIENT_OBJS = $(addprefix $(BUILD_DIR)/,$(notdir $(SSL_CLIENT_SRC:.c=.o)))
-vpath %.c $(sort $(dir $(SSL_CLIENT_SRC)))
-
-$(BUILD_DIR)/ssl_client: $(BUILD_DIR)/$(TARGET) $(SSL_CLIENT_OBJS)
-	@echo "[LD]         $@"
-	$Q$(CC) $(SSL_CLIENT_OBJS) $(LDFLAGS) -o $@ -liodriver -lmbedtls -lmbedx509 -lmbedcrypto
-
-DNS_CLIENT_SRC= \
-test/dns_client.c
-DNS_CLIENT_OBJS = $(addprefix $(BUILD_DIR)/,$(notdir $(DNS_CLIENT_SRC:.c=.o)))
-vpath %.c $(sort $(dir $(DNS_CLIENT_SRC)))
-
-$(BUILD_DIR)/dns_client: $(BUILD_DIR)/$(TARGET) $(DNS_CLIENT_OBJS)
-	@echo "[LD]         $@"
-	$Q$(CC) $(DNS_CLIENT_OBJS) $(LDFLAGS) -o $@ -liodriver -lmbedtls -lmbedx509 -lmbedcrypto
-
+include Tests.mk
 
 #######################################
 # clean up

@@ -41,6 +41,7 @@ io_timer_init(io_driver_t* driver, io_timer_t* t, int tickrate)
     LOGE("io_timer", "%s failed to timerfd_create\n", __func__);
     return;
   }
+  fcntl(t->timerfd, F_SETFD, FD_CLOEXEC);
 
   ts.it_interval.tv_sec     = 0;
   ts.it_interval.tv_nsec    = tickrate * 1000000;   // ms

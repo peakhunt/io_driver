@@ -2,6 +2,7 @@
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
@@ -524,6 +525,7 @@ io_ssl_accept_callback(io_driver_watcher_t* w, io_driver_event e)
     LOGE(TAG, "%s accept failed\n", __func__);
     return;
   }
+  fcntl(newsd, F_SETFD, FD_CLOEXEC);
 
   memset(&ev, 0, sizeof(ev));
   ev.ev = io_net_event_enum_alloc_connection;
@@ -626,6 +628,7 @@ io_net_bind(io_driver_t* driver, io_net_t* n, io_ssl_t* s, int port, io_net_call
     LOGE(TAG, "%s socket failed\n", __func__);
     goto socket_failed;
   }
+  fcntl(sd, F_SETFD, FD_CLOEXEC);
 
   sock_util_put_nonblock(sd);
   setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
@@ -692,6 +695,7 @@ io_net_connect(io_driver_t* driver, io_net_t* n, io_ssl_t* s,
     LOGE(TAG, "%s socket failed\n", __func__);
     goto socket_failed;
   }
+  fcntl(sd, F_SETFD, FD_CLOEXEC);
 
   sock_util_put_nonblock(sd);
 
@@ -809,6 +813,8 @@ io_net_udp(io_driver_t* driver, io_net_t* n, int port, io_net_callback cb)
     LOGE(TAG, "%s socket failed\n", __func__);
     goto socket_failed;
   }
+
+  fcntl(sd, F_SETFD, FD_CLOEXEC);
 
   sock_util_put_nonblock(sd);
 
